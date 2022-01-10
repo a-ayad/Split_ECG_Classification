@@ -1,0 +1,14 @@
+{
+    "training_epochs": 3,
+    "batchsize": 64,
+    "learningrate": 0.0002,
+    "batch_concat": 1,
+
+    "host": "192.168.178.26",
+    "port": 10087,
+    "max_recv": 4096,
+    "autoencoder": 0,
+    "detailed_output": 0,
+    "count_flops": 0,
+    "plots": 0
+}
