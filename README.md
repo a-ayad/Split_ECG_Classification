@@ -1,6 +1,6 @@
-# Improving the Communication and Computation Efficiency of Split Learning for IoT Applications
-## More Efficient Split Learning Method (MESL)
-This is the repository containing the code for this paper "Improving the Communication and Computation Efficiency of Split Learning for IoT Applications" accepted in "2021 IEEE Global Communications Conference"
+# Efficient and Private ECG Classification on the Edge Using a Modified Split Learning Mechanism
+## Split ECG (S-ECG)
+This is the repository containing the code for this paper "Efficient and Private ECG Classification on the Edge Using a Modified Split Learning Mechanism"
 
 
 ## Requirements
@@ -37,8 +37,8 @@ This is the repository containing the code for this paper "Improving the Communi
 Here's a brief overview of how you can use this project to run split learning on a server and a client.
 
 ### Download the dataset
-The GTSRB dataset can be downloaded from 
-[link](https://sid.erda.dk/public/archives/daaeac0d7ce1152aea9b61d9f1e19370/published-archive.html). download and unpack the zip file. Copy the folders "testset" and "trainingset" into the ./server/GTSRB/GTSRB directory in the project.
+The PTB=XL dataset can be downloaded from 
+[link](https://physionet.org/content/ptb-xl/1.0.1/). download and unpack the zip file. Copy the folders "testset" and "trainingset" into the ./server/ directory in the project.
 
 ### Set client side configurations
 
