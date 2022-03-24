@@ -107,7 +107,7 @@ In the static setting:
 If the loss of a batch exceeds this threshold, the gradients are not sent back to the client (client side update skipped).
 In the adaptive setting:
 Change the mechanism to "linear", "sigmoid" or "none":
-The adaptive threshold changees over the course of training and according to the value of the mechanism function, a percentage of updates per epoch are skipped.
+The adaptive threshold changes over the course of training and according to the value of the mechanism, a percentage of updates per epoch are skipped.
 
 ### Running the model
 
