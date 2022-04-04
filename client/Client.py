@@ -5,66 +5,51 @@ import json
 from torch.optim import SGD, Adam, AdamW
 import sys
 import time
-import random
 import numpy as np # linear algebra
-import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
-import matplotlib.pyplot as plt
-#import seaborn as sns
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torch.autograd import Variable
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import precision_recall_curve
-from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.metrics import accuracy_score, auc, f1_score, precision_score, recall_score, roc_auc_score
-from sklearn.preprocessing import MinMaxScaler
-import Plots
-import wfdb
-import ast
-import math
+import Metrics
 import os.path
 import utils
-#np.set_printoptions(threshold=np.inf)
+import wandb
+
 cwd = os.path.dirname(os.path.abspath(__file__))
 mlb_path = os.path.join(cwd,  "PTB-XL", "ptb-xl", "output", "mlb.pkl")
 scaler_path = os.path.join(cwd,  "PTB-XL", "ptb-xl", "output", "standard_scaler.pkl/")
 ptb_path = os.path.join(cwd, "PTB-XL", "ptb-xl/")
 
-import wandb
-
-wandb.init(project="Basis", entity="split-learning-medical")
-
-f = open('parameter_client.json', )
+f = open('client\parameter_client.json', )
 data = json.load(f)
 
 # set parameters fron json file
-#epoch = data["training_epochs"]
 lr = data["learningrate"]
 batchsize = data["batchsize"]
-batch_concat = data["batch_concat"]
 host = data["host"]
 port = data["port"]
 max_recv = data["max_recv"]
 autoencoder = data["autoencoder"]
-detailed_output = data["detailed_output"]
 count_flops = data["count_flops"]
-plots = data["plots"]
 autoencoder_train = data["autoencoder_train"]
 deactivate_train_after_num_epochs = data["deactivate_train_after_num_epochs"]
 grad_encode = data["grad_encode"]
 train_gradAE_active = data["train_gradAE_active"]
 deactivate_grad_train_after_num_epochs = data["deactivate_grad_train_after_num_epochs"]
+weights_and_biases = 0
 
-wandb.init(config={
-  "learning_rate": lr,
-  #"epochs": epoch,
-  "batch_size": batchsize,
-    "autoencoder": autoencoder
-})
 
-wandb.config.update({"learning_rate": lr, "PC: ": 2})
+if weights_and_biases:
+    wandb.init(project="Basis", entity="split-learning-medical")
+
+if weights_and_biases:
+    wandb.init(config={
+        "learning_rate": lr,
+        "batch_size": batchsize,
+        "autoencoder": autoencoder
+    })
+    wandb.config.update({"learning_rate": lr, "PC: ": 2})
 
 
 def print_json():
@@ -72,14 +57,11 @@ def print_json():
     print("grad_encode: ", grad_encode)
     print("gradAE_train: ", train_gradAE_active)
     print("deactivate_grad_train_after_num_epochs: ", deactivate_grad_train_after_num_epochs)
-    #print("Getting the metadata epoch: ", epoch)
     print("Getting the metadata host: ", host)
     print("Getting the metadata port: ", port)
     print("Getting the metadata batchsize: ", batchsize)
     print("Autoencoder: ", autoencoder)
-    print("detailed_output: ", detailed_output)
     print("count_flops: ", count_flops)
-    print("plots: ", plots)
     print("autoencoder_train: ", autoencoder_train)
     print("deactivate_train_after_num_epochs: ", deactivate_train_after_num_epochs)
 
@@ -149,24 +131,6 @@ if count_flops: #Does not work on the Jetson Nano yet. The amount of FLOPs doesn
     from pypapi import events, papi_high as high
 
 
-def str_to_number(label):
-    a = np.zeros(5)
-    if not label:
-        return a
-    for i in label:
-        if i == 'NORM':
-            a[0] = 1
-        if i == 'MI':
-            a[1] = 1
-        if i == 'STTC':
-            a[2] = 1
-        if i == 'HYP':
-            a[3] = 1
-        if i == 'CD':
-            a[4] = 1
-    return a
-
-
 class Client(nn.Module):
     """
     Client-Model:
@@ -184,6 +148,7 @@ class Client(nn.Module):
         self.pool2 = nn.MaxPool1d(kernel_size=3, stride=2)
 
     def forward(self, x, drop=True):
+        print("Input: ", x.shape)
         x = self.conv1(x)
         x = self.relu1(x)
         x = self.pool1(x)
@@ -191,6 +156,7 @@ class Client(nn.Module):
         x = self.conv2(x)
         x = self.relu2(x)
         x = self.pool2(x)
+        print("Output: ", x.shape)
         return x
 
 
@@ -315,8 +281,6 @@ def recvall(sock, n):
     #
     data = b''
     while len(data) < n:
-        if detailed_output:
-            print("Start function sock.recv")
         packet = sock.recv(n - len(data))
         if not packet:
             return None
@@ -527,7 +491,6 @@ def train_epoch(s, content):
             'client_output_train': client_output_send,
             'client_output_train_without_ae': client_output_train_without_ae_send,
             'label_train': label_train,  # concat_labels,
-            'batch_concat': batch_concat,
             'batchsize': batchsize,
             'train_active': train_active,
             'encoder_grad_server': encoder_grad_server,
@@ -535,8 +498,6 @@ def train_epoch(s, content):
             'grad_encode': grad_encode
         }
         active_training_time_batch_client += time.time() - start_time_batch_forward
-        if detailed_output:
-            print("Send the message to server")
         send_msg(s, 0, msg)
 
         if count_flops:
@@ -548,8 +509,9 @@ def train_epoch(s, content):
         client_grad_without_encode = msg["client_grad_without_encode"]
         client_grad = msg["grad_client"]
         # print("msg: ", msg)
-        wandb.log({"dropout_threshold": msg["dropout_threshold"]},
-                  commit=False)
+        if weights_and_biases:
+            wandb.log({"dropout_threshold": msg["dropout_threshold"]},
+                      commit=False)
 
         if count_flops:
             x = high.read_counters()  # reset counter
@@ -634,6 +596,7 @@ def train_epoch(s, content):
 
         # wandb.watch(client, log_freq=100)
         output = torch.round(output_train)
+
         # if np.sum(label.cpu().detach().numpy()[0]) > 1:
         #    if np.sum(output.cpu().detach().numpy()[0] > 1):
         #        print("output[0]: ", output.cpu().detach().numpy()[0])
@@ -660,7 +623,7 @@ def train_epoch(s, content):
             # print("output: ", output)
             pass
 
-        hamming_epoch += Plots.Accuracy(label_train.detach().clone().cpu(), output.detach().clone().cpu())#accuracy_score(label_train.detach().clone().cpu(), output.detach().clone().cpu())
+        hamming_epoch += Metrics.Accuracy(label_train.detach().clone().cpu(), output.detach().clone().cpu())#accuracy_score(label_train.detach().clone().cpu(), output.detach().clone().cpu())
         precision_epoch += precision_score(label_train.detach().clone().cpu(),
                                            output.detach().clone().cpu(), average='micro')
         recall_epoch += recall_score(label_train.detach().clone().cpu(), output.detach().clone().cpu(), average='micro')
@@ -692,11 +655,12 @@ def train_epoch(s, content):
     print("MegaFLOPS_send", flops_send/1000000)
     print("MegaFLOPS_recieve", flops_recieve/1000000)
 
-    wandb.log({"Batches Abortrate": batches_aborted / total_train_nr, "MegaFLOPS Client Encoder": flops_encoder_epoch/1000000,
-               "MegaFLOPS Client Forward": flops_forward_epoch / 1000000,
-               "MegaFLOPS Client Backprop": flops_backprop_epoch / 1000000, "MegaFLOPS Send": flops_send / 1000000,
-               "MegaFLOPS Recieve": flops_recieve / 1000000},
-              commit=False)
+    if weights_and_biases:
+        wandb.log({"Batches Abortrate": batches_aborted / total_train_nr, "MegaFLOPS Client Encoder": flops_encoder_epoch/1000000,
+                   "MegaFLOPS Client Forward": flops_forward_epoch / 1000000,
+                   "MegaFLOPS Client Backprop": flops_backprop_epoch / 1000000, "MegaFLOPS Send": flops_send / 1000000,
+                   "MegaFLOPS Recieve": flops_recieve / 1000000},
+                  commit=False)
 
     global auc_train_log
     auc_train_log = auc_train / total_train_nr
@@ -732,14 +696,8 @@ def val_stage(s, content):
             msg = {'client_output_val/test': client_output_val,
                    'label_val/test': label_val,
                    }
-            if detailed_output:
-                print("The msg is:", msg)
             send_msg(s, 1, msg)
-            if detailed_output:
-                print("294: send_msg success!")
             msg = recieve_msg(s)
-            if detailed_output:
-                print("296: recieve_msg success!")
             correct_val_add = msg["correct_val/test"]
             val_loss = msg["val/test_loss"]
             output_val_server = msg["output_val/test_server"]
@@ -761,8 +719,8 @@ def val_stage(s, content):
             output_val_server = torch.round(output_val_server)
             accuracy_sklearn += accuracy_score(label_val.detach().clone().cpu(),
                                             output_val_server.detach().clone().cpu())
-            accuracy_custom += Plots.Accuracy(label_val.detach().clone().cpu(),
-                                            output_val_server.detach().clone().cpu())
+            accuracy_custom += Metrics.Accuracy(label_val.detach().clone().cpu(),
+                                                output_val_server.detach().clone().cpu())
             precision_epoch += precision_score(label_val.detach().clone().cpu(),
                                                output_val_server.detach().clone().cpu(), average='micro',
                                                zero_division=0)
@@ -771,7 +729,8 @@ def val_stage(s, content):
             f1_epoch += f1_score(label_val.detach().clone().cpu(), output_val_server.detach().clone().cpu(),
                                  average='micro', zero_division=0)
 
-    wandb.log({"Loss_val": val_loss_total / total_val_nr,
+    if weights_and_biases:
+        wandb.log({"Loss_val": val_loss_total / total_val_nr,
                "Accuracy_val_micro": accuracy_custom / total_val_nr,
                "F1_val": f1_epoch / total_val_nr,
                "AUC_val": auc_val / total_val_nr,
@@ -809,14 +768,8 @@ def test_stage(s, epoch):
             msg = {'client_output_val/test': client_output_test,
                    'label_val/test': label_test,
                    }
-            if detailed_output:
-                print("The msg is:", msg)
             send_msg(s, 1, msg)
-            if detailed_output:
-                print("294: send_msg success!")
             msg = recieve_msg(s)
-            if detailed_output:
-                print("296: recieve_msg success!")
             correct_test_add = msg["correct_val/test"]
             test_loss = msg["val/test_loss"]
             output_test_server = msg["output_val/test_server"]
@@ -875,7 +828,8 @@ def test_stage(s, epoch):
     print("Average data transfer/epoch: ", data_transfer_per_epoch / epoch / 1000000, " MB")
     print("Average dismissal rate: ", average_dismissal_rate / epoch)
 
-    wandb.config.update({"Average data transfer/epoch (MB): ": data_transfer_per_epoch / epoch / 1000000,
+    if weights_and_biases:
+        wandb.config.update({"Average data transfer/epoch (MB): ": data_transfer_per_epoch / epoch / 1000000,
                          "Average dismissal rate: ": average_dismissal_rate / epoch,
                          "total_MegaFLOPS_forward": total_flops_forward/1000000, "total_MegaFLOPS_encoder": total_flops_encoder/1000000,
                          "total_MegaFLOPS_backprob": total_flops_backprob/1000000,"total_MegaFLOPS modal": total_flops_model/1000000 ,"total_MegaFLOPS": total_flops_all/1000000})
@@ -917,9 +871,9 @@ def main():
 
     global X_train, X_val, y_val, y_train, y_test, X_test
     sampling_frequency = 100
-    datafolder = ptb_path
+    datafolder = 'C:/Users/maria/PycharmProjects/Medical-MESL-Debug/Medical-Dataset/Normal/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/'
     task = 'superdiagnostic'
-    outputfolder = mlb_path
+    outputfolder = 'C:/Users/maria/PycharmProjects/Medical-MESL-Debug/Medical-Dataset/Normal/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/output/'
 
     # Load PTB-XL data
     data, raw_labels = utils.load_dataset(datafolder, sampling_frequency)
@@ -932,22 +886,20 @@ def main():
 
     # 1-9 for training
     X_train = data[labels.strat_fold < 10]
+    global y_train
     y_train = Y[labels.strat_fold < 10]
     # 10 for validation
     X_val = data[labels.strat_fold == 10]
     y_val = Y[labels.strat_fold == 10]
 
-    #X_test = data[labels.strat_fold == 10]
-    #y_test = Y[labels.strat_fold == 10]
-
     num_classes = 5  # <=== number of classes in the finetuning dataset
     input_shape = [1000, 12]  # <=== shape of samples, [None, 12] in case of different lengths
 
-    print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)#, X_test.shape, y_test.shape)
+    print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)
 
     import pickle
 
-    standard_scaler = pickle.load(open("PTB-XL/ptb-xl/standard_scaler.pkl", "rb"))
+    standard_scaler = pickle.load(open('C:/Users/maria/PycharmProjects/PTB-XL/standard_scaler.pkl', "rb"))
 
     X_train = utils.apply_standardizer(X_train, standard_scaler)
     X_val = utils.apply_standardizer(X_val, standard_scaler)
@@ -955,11 +907,6 @@ def main():
 
 
     init()
-
-    if plots: #visualize data
-        Plots.load_dataset()
-        Plots.plotten()
-        Plots.ecg_signals()
 
     global epoch
     epoch = 0

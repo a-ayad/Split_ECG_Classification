@@ -14,9 +14,10 @@ import random
 import sys
 from sklearn.preprocessing import MinMaxScaler
 import zlib
+import os
 
 # load data from json file
-f = open('parameter_server.json', )
+f = open('server\parameter_server.json', )
 data = json.load(f)
 
 # set parameters fron json file
@@ -27,11 +28,11 @@ lr = data["learningrate"]
 update_treshold = data["update_threshold"]
 max_numclients = data["max_nr_clients"]
 autoencoder = data["autoencoder"]
-detailed_output = data["detailed_output"]
-autoencoder_train = data["autoencoder_train"]
+#autoencoder_train = data["autoencoder_train"]
 num_epochs = data["epochs"]
 mech = data["mechanism"]
 pretrain_active = data["pretrain_active"]
+update_mechanism = data["update_mechanism"]
 
 data_send_per_epoch = 0
 client_weights = 0
@@ -51,15 +52,10 @@ class Decode(nn.Module):
         self.t_conve = nn.ConvTranspose1d(144, 192, 2, stride=2, padding=1)
 
     def forward(self, x):
-        #print("decode 1 Layer: ", x.size())
         x = self.t_convb(x)
-        #print("decode 2 Layer: ", x.size())
         x = self.t_convc(x)
-        #print("decode 3 Layer: ", x.size())
         x = self.t_convd(x)
-        #print("decode 4 Layer: ", x.size())
         x = self.t_conve(x)
-        #print("decode 4 Layer: ", x.size())
         return x
 
 
@@ -76,14 +72,9 @@ class Grad_Encoder(nn.Module):
 
     def forward(self, x):
         x = self.conva(x)
-        #print("encode 1 Layer: ", x.size())
         x = self.convb(x)
-        #print("encode 2 Layer: ", x.size())
         x = self.convc(x)
-        #print("encode 3 Layer: ", x.size())
         x = self.convd(x)
-        #print("encode 4 Layer: ", x.size())
-        #print("encode 5 Layer: ", x.size())
         return x
 
 
@@ -181,8 +172,6 @@ def recieve_msg(sock):
     msg = pickle.loads(msg)
     getid = msg[0]
     content = msg[1]
-    #if detailed_output:
-    #print("handle_request: ", content)
     handle_request(sock, getid, content)
 
 
@@ -195,8 +184,6 @@ def recv_msg(sock):
     :return: returns the data retrieved from the recvall function
     """
     raw_msglen = recvall(sock, 4)
-    if detailed_output:
-        print("RAW MSG LEN: ", raw_msglen)
     if not raw_msglen:
         return None
     msglen = struct.unpack('>I', raw_msglen)[0]
@@ -212,13 +199,10 @@ def recvall(sock, n):
     """
     data = b''
     while len(data) < n:
-        if detailed_output:
-            print("n- lendata: ", n - len(data))
         packet = sock.recv(n - len(data))
         if not packet:
             return None
         data += packet
-    #if detailed_output:
     #if len(data) > 4:
         #print("Length of Data: ", len(data))
     return data
@@ -275,8 +259,6 @@ def updateclientmodels(sock, updatedweights):
     :param sock: the socket
     :param updatedweights: the client side weghts with actual status
     """
-    if detailed_output:
-        print("updateclientmodels")
     update_time = time.time()
     #client.load_state_dict(updatedweights)
     global client_weights
@@ -297,14 +279,8 @@ def dropout_mechanisms(mechanism, epoch):
     def sigmoid(x):
         return 1 / (1 + np.exp(-x))
 
-    if mechanism == 'exp':
-        return 1 / np.exp(epoch * 0.1)
-    if mechanism == 'lin':
+    if mechanism == 'linear':
         return (num_epochs - epoch) / num_epochs
-    if mechanism == 'cos':
-        return 0.5+np.cos(epoch * 2 * np.pi * 0.05)/2
-    if mechanism == 'rect':
-        return np.round(0.55-epoch*0.01)
     if mechanism == 'none':
         return 1
     if mechanism == 'sigmoid':
@@ -335,8 +311,8 @@ def calc_gradients(conn, msg):
     global grad_available
     start_time_training = time.time()
     with torch.no_grad():
-        client_output_train, client_output_train_without_ae, label_train, batchsize, batch_concat, train_active, encoder_grad_server, train_grad_active, grad_encode = msg['client_output_train'], msg['client_output_train_without_ae'], msg['label_train'], msg[
-            'batchsize'], msg['batch_concat'], msg['train_active'], msg['encoder_grad_server'], msg['train_grad_active'], msg['grad_encode']  # client output tensor
+        client_output_train, client_output_train_without_ae, label_train, batchsize, train_active, encoder_grad_server, train_grad_active, grad_encode = msg['client_output_train'], msg['client_output_train_without_ae'], msg['label_train'], msg[
+            'batchsize'], msg['train_active'], msg['encoder_grad_server'], msg['train_grad_active'], msg['grad_encode']  # client output tensor
         client_output_train, label_train = client_output_train.to(device), label_train
     if autoencoder:
         if train_active:
@@ -385,7 +361,14 @@ def calc_gradients(conn, msg):
     random_number_between_0_and_1 = random.uniform(0, 1)
 
     client_grad_without_encode = 0
-    if random_number_between_0_and_1 < dropout_mechanisms(mechanism=mech, epoch=epoch):#train_loss > update_treshold:#
+    update = False
+    if update_mechanism == "static":
+        if train_loss > update_treshold:
+            update = True
+    else:
+        if random_number_between_0_and_1 < dropout_mechanisms(mechanism=mech, epoch=epoch):
+            update = True
+    if update:
         if grad_encode:
             if train_grad_active:
                 optimizer_grad_encoder.zero_grad()
@@ -439,8 +422,6 @@ def initialize_client(conn):
     the new connected client
     :param conn:
     """
-    if detailed_output:
-        print("connected clients: ", len(connectedclients))
     if len(connectedclients) == 1:
         msg = 0
     else:
@@ -595,7 +576,7 @@ def main():
         #initialize_client(connectedclients[0])
         clientHandler(conn, addr)
 
-    for i in range(5):
+    for i in range(1):
         conn, addr = s.accept()
         connectedclients.append(conn)
         print('Conntected with', addr)
