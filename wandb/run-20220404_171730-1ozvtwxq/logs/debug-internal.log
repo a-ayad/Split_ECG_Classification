@@ -1,0 +1,158 @@
+2022-04-04 17:17:31,458 INFO    MainThread:11112 [internal.py:wandb_internal():86] W&B internal server running at pid: 11112, started at: 2022-04-04 17:17:31.453779
+2022-04-04 17:17:31,459 INFO    WriterThread:11112 [datastore.py:open_for_write():77] open: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\run-1ozvtwxq.wandb
+2022-04-04 17:17:31,459 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: check_version
+2022-04-04 17:17:31,466 DEBUG   SenderThread:11112 [sender.py:send():182] send: header
+2022-04-04 17:17:31,466 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: check_version
+2022-04-04 17:17:31,557 DEBUG   SenderThread:11112 [sender.py:send():182] send: run
+2022-04-04 17:17:31,908 INFO    SenderThread:11112 [dir_watcher.py:__init__():169] watching files in: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files
+2022-04-04 17:17:31,908 INFO    SenderThread:11112 [sender.py:_start_run_threads():740] run started: 1ozvtwxq with start time 1649085450
+2022-04-04 17:17:31,908 DEBUG   SenderThread:11112 [sender.py:send():182] send: summary
+2022-04-04 17:17:31,909 INFO    SenderThread:11112 [sender.py:_save_file():873] saving file wandb-summary.json with policy end
+2022-04-04 17:17:31,909 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: run_start
+2022-04-04 17:17:31,931 DEBUG   HandlerThread:11112 [meta.py:__init__():40] meta init
+2022-04-04 17:17:31,931 DEBUG   HandlerThread:11112 [meta.py:__init__():54] meta init done
+2022-04-04 17:17:31,931 DEBUG   HandlerThread:11112 [meta.py:probe():211] probe
+2022-04-04 17:17:31,950 DEBUG   HandlerThread:11112 [meta.py:_setup_git():201] setup git
+2022-04-04 17:17:32,034 DEBUG   HandlerThread:11112 [meta.py:_setup_git():208] setup git done
+2022-04-04 17:17:32,034 DEBUG   HandlerThread:11112 [meta.py:_save_pip():58] save pip
+2022-04-04 17:17:32,035 DEBUG   HandlerThread:11112 [meta.py:_save_pip():72] save pip done
+2022-04-04 17:17:32,035 DEBUG   HandlerThread:11112 [meta.py:_save_conda():79] save conda
+2022-04-04 17:17:32,038 ERROR   HandlerThread:11112 [meta.py:_save_conda():86] Error saving conda packages
+Traceback (most recent call last):
+  File "G:\Anaconda\envs\Medical-MESL\lib\site-packages\wandb\sdk\internal\meta.py", line 84, in _save_conda
+    subprocess.call(["conda", "env", "export"], stdout=f)
+  File "G:\Anaconda\envs\Medical-MESL\lib\subprocess.py", line 349, in call
+    with Popen(*popenargs, **kwargs) as p:
+  File "G:\Anaconda\envs\Medical-MESL\lib\subprocess.py", line 951, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "G:\Anaconda\envs\Medical-MESL\lib\subprocess.py", line 1420, in _execute_child
+    hp, ht, pid, tid = _winapi.CreateProcess(executable, args,
+FileNotFoundError: [WinError 2] Das System kann die angegebene Datei nicht finden
+2022-04-04 17:17:32,054 DEBUG   HandlerThread:11112 [meta.py:_save_conda():87] save conda done
+2022-04-04 17:17:32,054 DEBUG   HandlerThread:11112 [meta.py:probe():249] probe done
+2022-04-04 17:17:32,113 DEBUG   SenderThread:11112 [sender.py:send():182] send: files
+2022-04-04 17:17:32,113 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: stop_status
+2022-04-04 17:17:32,113 INFO    SenderThread:11112 [sender.py:_save_file():873] saving file wandb-metadata.json with policy now
+2022-04-04 17:17:32,114 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: stop_status
+2022-04-04 17:17:32,290 DEBUG   SenderThread:11112 [sender.py:send():182] send: config
+2022-04-04 17:17:32,720 INFO    Thread-17 :11112 [upload_job.py:push():137] Uploaded file C:\Users\maria\AppData\Local\Temp\tmp4vt_p6l7wandb\3durni0q-wandb-metadata.json
+2022-04-04 17:17:32,918 INFO    Thread-12 :11112 [dir_watcher.py:_on_file_created():217] file/dir created: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\output.log
+2022-04-04 17:17:32,919 INFO    Thread-12 :11112 [dir_watcher.py:_on_file_created():217] file/dir created: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\conda-environment.yaml
+2022-04-04 17:17:32,919 INFO    Thread-12 :11112 [dir_watcher.py:_on_file_created():217] file/dir created: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\requirements.txt
+2022-04-04 17:17:32,919 INFO    Thread-12 :11112 [dir_watcher.py:_on_file_created():217] file/dir created: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\wandb-metadata.json
+2022-04-04 17:17:32,920 INFO    Thread-12 :11112 [dir_watcher.py:_on_file_created():217] file/dir created: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\wandb-summary.json
+2022-04-04 17:17:34,945 INFO    Thread-12 :11112 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\output.log
+2022-04-04 17:17:41,053 INFO    Thread-12 :11112 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\output.log
+2022-04-04 17:17:43,079 INFO    Thread-12 :11112 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\output.log
+2022-04-04 17:17:45,105 INFO    Thread-12 :11112 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\output.log
+2022-04-04 17:17:47,361 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: stop_status
+2022-04-04 17:17:47,361 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: stop_status
+2022-04-04 17:18:02,169 INFO    Thread-12 :11112 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\config.yaml
+2022-04-04 17:18:02,593 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: stop_status
+2022-04-04 17:18:02,593 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: stop_status
+2022-04-04 17:18:03,183 DEBUG   SenderThread:11112 [sender.py:send():182] send: telemetry
+2022-04-04 17:18:03,184 DEBUG   SenderThread:11112 [sender.py:send():182] send: exit
+2022-04-04 17:18:03,185 INFO    SenderThread:11112 [sender.py:send_exit():291] handling exit code: 1
+2022-04-04 17:18:03,185 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: poll_exit
+2022-04-04 17:18:03,185 INFO    SenderThread:11112 [sender.py:send_exit():293] handling runtime: 31
+2022-04-04 17:18:03,186 INFO    SenderThread:11112 [sender.py:_save_file():873] saving file wandb-summary.json with policy end
+2022-04-04 17:18:03,186 INFO    SenderThread:11112 [sender.py:send_exit():303] send defer
+2022-04-04 17:18:03,187 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: poll_exit
+2022-04-04 17:18:03,196 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: defer
+2022-04-04 17:18:03,197 INFO    HandlerThread:11112 [handler.py:handle_request_defer():143] handle defer: 0
+2022-04-04 17:18:03,197 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: defer
+2022-04-04 17:18:03,197 INFO    SenderThread:11112 [sender.py:send_request_defer():312] handle sender defer: 0
+2022-04-04 17:18:03,197 INFO    SenderThread:11112 [sender.py:transition_state():316] send defer: 1
+2022-04-04 17:18:03,197 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: defer
+2022-04-04 17:18:03,197 INFO    HandlerThread:11112 [handler.py:handle_request_defer():143] handle defer: 1
+2022-04-04 17:18:03,209 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: defer
+2022-04-04 17:18:03,210 INFO    SenderThread:11112 [sender.py:send_request_defer():312] handle sender defer: 1
+2022-04-04 17:18:03,210 INFO    SenderThread:11112 [sender.py:transition_state():316] send defer: 2
+2022-04-04 17:18:03,210 DEBUG   SenderThread:11112 [sender.py:send():182] send: stats
+2022-04-04 17:18:03,211 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: defer
+2022-04-04 17:18:03,211 INFO    HandlerThread:11112 [handler.py:handle_request_defer():143] handle defer: 2
+2022-04-04 17:18:03,211 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: defer
+2022-04-04 17:18:03,211 INFO    SenderThread:11112 [sender.py:send_request_defer():312] handle sender defer: 2
+2022-04-04 17:18:03,211 INFO    SenderThread:11112 [sender.py:transition_state():316] send defer: 3
+2022-04-04 17:18:03,212 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: defer
+2022-04-04 17:18:03,212 INFO    HandlerThread:11112 [handler.py:handle_request_defer():143] handle defer: 3
+2022-04-04 17:18:03,212 DEBUG   SenderThread:11112 [sender.py:send():182] send: summary
+2022-04-04 17:18:03,212 INFO    SenderThread:11112 [sender.py:_save_file():873] saving file wandb-summary.json with policy end
+2022-04-04 17:18:03,213 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: defer
+2022-04-04 17:18:03,213 INFO    SenderThread:11112 [sender.py:send_request_defer():312] handle sender defer: 3
+2022-04-04 17:18:03,213 INFO    SenderThread:11112 [sender.py:transition_state():316] send defer: 4
+2022-04-04 17:18:03,213 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: defer
+2022-04-04 17:18:03,213 INFO    HandlerThread:11112 [handler.py:handle_request_defer():143] handle defer: 4
+2022-04-04 17:18:03,213 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: defer
+2022-04-04 17:18:03,213 INFO    SenderThread:11112 [sender.py:send_request_defer():312] handle sender defer: 4
+2022-04-04 17:18:03,298 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: poll_exit
+2022-04-04 17:18:03,416 INFO    SenderThread:11112 [sender.py:transition_state():316] send defer: 5
+2022-04-04 17:18:03,416 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: poll_exit
+2022-04-04 17:18:03,417 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: defer
+2022-04-04 17:18:03,417 INFO    HandlerThread:11112 [handler.py:handle_request_defer():143] handle defer: 5
+2022-04-04 17:18:03,417 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: defer
+2022-04-04 17:18:03,417 INFO    SenderThread:11112 [sender.py:send_request_defer():312] handle sender defer: 5
+2022-04-04 17:18:03,417 INFO    SenderThread:11112 [dir_watcher.py:finish():283] shutting down directory watcher
+2022-04-04 17:18:03,530 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: poll_exit
+2022-04-04 17:18:04,186 INFO    SenderThread:11112 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\output.log
+2022-04-04 17:18:04,186 INFO    SenderThread:11112 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\config.yaml
+2022-04-04 17:18:04,187 INFO    SenderThread:11112 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\wandb-summary.json
+2022-04-04 17:18:04,187 INFO    SenderThread:11112 [dir_watcher.py:finish():313] scan: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files
+2022-04-04 17:18:04,187 INFO    SenderThread:11112 [dir_watcher.py:finish():327] scan save: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\conda-environment.yaml conda-environment.yaml
+2022-04-04 17:18:04,187 INFO    SenderThread:11112 [dir_watcher.py:finish():327] scan save: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\config.yaml config.yaml
+2022-04-04 17:18:04,188 INFO    SenderThread:11112 [dir_watcher.py:finish():327] scan save: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\output.log output.log
+2022-04-04 17:18:04,188 INFO    SenderThread:11112 [dir_watcher.py:finish():327] scan save: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\requirements.txt requirements.txt
+2022-04-04 17:18:04,193 INFO    SenderThread:11112 [dir_watcher.py:finish():327] scan save: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\wandb-metadata.json wandb-metadata.json
+2022-04-04 17:18:04,193 INFO    SenderThread:11112 [dir_watcher.py:finish():327] scan save: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\wandb-summary.json wandb-summary.json
+2022-04-04 17:18:04,196 INFO    SenderThread:11112 [sender.py:transition_state():316] send defer: 6
+2022-04-04 17:18:04,196 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: poll_exit
+2022-04-04 17:18:04,197 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: defer
+2022-04-04 17:18:04,199 INFO    HandlerThread:11112 [handler.py:handle_request_defer():143] handle defer: 6
+2022-04-04 17:18:04,200 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: defer
+2022-04-04 17:18:04,200 INFO    SenderThread:11112 [sender.py:send_request_defer():312] handle sender defer: 6
+2022-04-04 17:18:04,200 INFO    SenderThread:11112 [file_pusher.py:finish():177] shutting down file pusher
+2022-04-04 17:18:04,310 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: poll_exit
+2022-04-04 17:18:04,310 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: poll_exit
+2022-04-04 17:18:04,418 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: poll_exit
+2022-04-04 17:18:04,418 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: poll_exit
+2022-04-04 17:18:04,525 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: poll_exit
+2022-04-04 17:18:04,525 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: poll_exit
+2022-04-04 17:18:04,711 INFO    Thread-19 :11112 [upload_job.py:push():137] Uploaded file E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\output.log
+2022-04-04 17:18:04,730 INFO    Thread-18 :11112 [upload_job.py:push():137] Uploaded file E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\config.yaml
+2022-04-04 17:18:04,732 INFO    Thread-21 :11112 [upload_job.py:push():137] Uploaded file E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\wandb-summary.json
+2022-04-04 17:18:04,759 INFO    Thread-20 :11112 [upload_job.py:push():137] Uploaded file E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\files\requirements.txt
+2022-04-04 17:18:04,807 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: poll_exit
+2022-04-04 17:18:04,807 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: poll_exit
+2022-04-04 17:18:04,918 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: poll_exit
+2022-04-04 17:18:04,918 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: poll_exit
+2022-04-04 17:18:04,965 INFO    Thread-11 :11112 [sender.py:transition_state():316] send defer: 7
+2022-04-04 17:18:04,965 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: defer
+2022-04-04 17:18:04,965 INFO    HandlerThread:11112 [handler.py:handle_request_defer():143] handle defer: 7
+2022-04-04 17:18:04,965 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: defer
+2022-04-04 17:18:04,965 INFO    SenderThread:11112 [sender.py:send_request_defer():312] handle sender defer: 7
+2022-04-04 17:18:05,027 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: poll_exit
+2022-04-04 17:18:05,286 INFO    SenderThread:11112 [sender.py:transition_state():316] send defer: 8
+2022-04-04 17:18:05,286 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: poll_exit
+2022-04-04 17:18:05,287 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: defer
+2022-04-04 17:18:05,287 INFO    HandlerThread:11112 [handler.py:handle_request_defer():143] handle defer: 8
+2022-04-04 17:18:05,287 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: defer
+2022-04-04 17:18:05,287 INFO    SenderThread:11112 [sender.py:send_request_defer():312] handle sender defer: 8
+2022-04-04 17:18:05,287 INFO    SenderThread:11112 [sender.py:transition_state():316] send defer: 9
+2022-04-04 17:18:05,288 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: defer
+2022-04-04 17:18:05,288 DEBUG   SenderThread:11112 [sender.py:send():182] send: final
+2022-04-04 17:18:05,288 INFO    HandlerThread:11112 [handler.py:handle_request_defer():143] handle defer: 9
+2022-04-04 17:18:05,288 DEBUG   SenderThread:11112 [sender.py:send():182] send: footer
+2022-04-04 17:18:05,289 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: defer
+2022-04-04 17:18:05,289 INFO    SenderThread:11112 [sender.py:send_request_defer():312] handle sender defer: 9
+2022-04-04 17:18:05,403 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: poll_exit
+2022-04-04 17:18:05,403 DEBUG   SenderThread:11112 [sender.py:send_request():196] send_request: poll_exit
+2022-04-04 17:18:05,403 INFO    SenderThread:11112 [file_pusher.py:join():182] waiting for file pusher
+2022-04-04 17:18:05,406 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: get_summary
+2022-04-04 17:18:05,406 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: sampled_history
+2022-04-04 17:18:05,407 DEBUG   HandlerThread:11112 [handler.py:handle_request():126] handle_request: shutdown
+2022-04-04 17:18:05,407 INFO    HandlerThread:11112 [handler.py:finish():683] shutting down handler
+2022-04-04 17:18:06,292 INFO    WriterThread:11112 [datastore.py:close():281] close: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\run-1ozvtwxq.wandb
+2022-04-04 17:18:06,418 INFO    SenderThread:11112 [sender.py:finish():979] shutting down sender
+2022-04-04 17:18:06,418 INFO    SenderThread:11112 [file_pusher.py:finish():177] shutting down file pusher
+2022-04-04 17:18:06,418 INFO    SenderThread:11112 [file_pusher.py:join():182] waiting for file pusher
+2022-04-04 17:18:06,420 INFO    MainThread:11112 [internal.py:handle_exit():76] Internal process exited

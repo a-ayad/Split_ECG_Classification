@@ -1,9 +1,16 @@
 {
-    "learningrate": 0.0002,
-    "update_threshold": 0.0,
     "max_nr_clients": 5,
-
     "host": "0.0.0.0",
     "port": 10087,
-    "max_recv": 4096
+    "max_recv": 4096,
+
+    "learningrate": 0.0005,
+    "epochs": 30,
+
+    "autoencoder": 0,
+    "update_mechanism": "static",
+    "update_threshold": 0,
+    "mechanism": "none",
+    
+    "pretrain_active": 0
 }

@@ -1,0 +1,55 @@
+2022-04-04 17:59:00,155 INFO    MainThread:1708 [internal.py:wandb_internal():86] W&B internal server running at pid: 1708, started at: 2022-04-04 17:59:00.149579
+2022-04-04 17:59:00,156 INFO    WriterThread:1708 [datastore.py:open_for_write():77] open: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\run-1ihi9qe7.wandb
+2022-04-04 17:59:00,157 DEBUG   HandlerThread:1708 [handler.py:handle_request():126] handle_request: check_version
+2022-04-04 17:59:00,163 DEBUG   SenderThread:1708 [sender.py:send():182] send: header
+2022-04-04 17:59:00,164 DEBUG   SenderThread:1708 [sender.py:send_request():196] send_request: check_version
+2022-04-04 17:59:00,246 DEBUG   SenderThread:1708 [sender.py:send():182] send: run
+2022-04-04 17:59:00,575 DEBUG   HandlerThread:1708 [handler.py:handle_request():126] handle_request: run_start
+2022-04-04 17:59:00,586 INFO    SenderThread:1708 [dir_watcher.py:__init__():169] watching files in: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files
+2022-04-04 17:59:00,586 INFO    SenderThread:1708 [sender.py:_start_run_threads():740] run started: 1ihi9qe7 with start time 1649087939
+2022-04-04 17:59:00,586 DEBUG   SenderThread:1708 [sender.py:send():182] send: summary
+2022-04-04 17:59:00,587 INFO    SenderThread:1708 [sender.py:_save_file():873] saving file wandb-summary.json with policy end
+2022-04-04 17:59:00,598 DEBUG   HandlerThread:1708 [meta.py:__init__():40] meta init
+2022-04-04 17:59:00,599 DEBUG   HandlerThread:1708 [meta.py:__init__():54] meta init done
+2022-04-04 17:59:00,599 DEBUG   HandlerThread:1708 [meta.py:probe():211] probe
+2022-04-04 17:59:00,608 DEBUG   HandlerThread:1708 [meta.py:_setup_git():201] setup git
+2022-04-04 17:59:00,703 DEBUG   HandlerThread:1708 [meta.py:_setup_git():208] setup git done
+2022-04-04 17:59:00,703 DEBUG   HandlerThread:1708 [meta.py:_save_pip():58] save pip
+2022-04-04 17:59:00,704 DEBUG   HandlerThread:1708 [meta.py:_save_pip():72] save pip done
+2022-04-04 17:59:00,704 DEBUG   HandlerThread:1708 [meta.py:_save_conda():79] save conda
+2022-04-04 17:59:00,708 ERROR   HandlerThread:1708 [meta.py:_save_conda():86] Error saving conda packages
+Traceback (most recent call last):
+  File "G:\Anaconda\envs\Medical-MESL\lib\site-packages\wandb\sdk\internal\meta.py", line 84, in _save_conda
+    subprocess.call(["conda", "env", "export"], stdout=f)
+  File "G:\Anaconda\envs\Medical-MESL\lib\subprocess.py", line 349, in call
+    with Popen(*popenargs, **kwargs) as p:
+  File "G:\Anaconda\envs\Medical-MESL\lib\subprocess.py", line 951, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "G:\Anaconda\envs\Medical-MESL\lib\subprocess.py", line 1420, in _execute_child
+    hp, ht, pid, tid = _winapi.CreateProcess(executable, args,
+FileNotFoundError: [WinError 2] Das System kann die angegebene Datei nicht finden
+2022-04-04 17:59:00,710 DEBUG   HandlerThread:1708 [meta.py:_save_conda():87] save conda done
+2022-04-04 17:59:00,710 DEBUG   HandlerThread:1708 [meta.py:probe():249] probe done
+2022-04-04 17:59:00,810 DEBUG   SenderThread:1708 [sender.py:send():182] send: files
+2022-04-04 17:59:00,810 DEBUG   HandlerThread:1708 [handler.py:handle_request():126] handle_request: stop_status
+2022-04-04 17:59:00,810 INFO    SenderThread:1708 [sender.py:_save_file():873] saving file wandb-metadata.json with policy now
+2022-04-04 17:59:00,812 DEBUG   SenderThread:1708 [sender.py:send_request():196] send_request: stop_status
+2022-04-04 17:59:01,008 DEBUG   SenderThread:1708 [sender.py:send():182] send: config
+2022-04-04 17:59:01,396 INFO    Thread-17 :1708 [upload_job.py:push():137] Uploaded file C:\Users\maria\AppData\Local\Temp\tmpqlilb4z_wandb\opl7yic9-wandb-metadata.json
+2022-04-04 17:59:01,604 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_created():217] file/dir created: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\conda-environment.yaml
+2022-04-04 17:59:01,604 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_created():217] file/dir created: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\wandb-summary.json
+2022-04-04 17:59:01,604 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_created():217] file/dir created: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
+2022-04-04 17:59:01,604 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_created():217] file/dir created: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\wandb-metadata.json
+2022-04-04 17:59:01,605 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_created():217] file/dir created: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\requirements.txt
+2022-04-04 17:59:03,615 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
+2022-04-04 17:59:09,677 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
+2022-04-04 17:59:11,690 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
+2022-04-04 17:59:15,737 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
+2022-04-04 17:59:16,077 DEBUG   HandlerThread:1708 [handler.py:handle_request():126] handle_request: stop_status
+2022-04-04 17:59:16,077 DEBUG   SenderThread:1708 [sender.py:send_request():196] send_request: stop_status
+2022-04-04 17:59:17,749 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
+2022-04-04 17:59:19,770 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
+2022-04-04 17:59:21,779 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
+2022-04-04 17:59:23,800 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
+2022-04-04 17:59:25,822 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
+2022-04-04 17:59:27,842 INFO    Thread-12 :1708 [dir_watcher.py:_on_file_modified():230] file/dir modified: E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175859-1ihi9qe7\files\output.log
