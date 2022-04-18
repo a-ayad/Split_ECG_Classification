@@ -120,7 +120,7 @@ def init():
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batchsize, shuffle=True)
 
 
-if count_flops: 
+if count_flops:
     # Imports to count FLOPs
     # Does not work on every architecture
     # The paranoid switch prevents the FLOPs count
@@ -167,18 +167,13 @@ class Encode(nn.Module):
         self.conva = nn.Conv1d(192, 144, 2, stride=2,  padding=1)
         self.convb = nn.Conv1d(144, 96, 2, stride=2, padding=0)
         self.convc = nn.Conv1d(96, 48, 2, stride=2,  padding=0)
-        self.convd = nn.Conv1d(48, 24, 2, stride=2, padding=0)##
+        self.convd = nn.Conv1d(48, 24, 2, stride=2, padding=0)
 
     def forward(self, x):
         x = self.conva(x)
-        #print("encode 1 Layer: ", x.size())
         x = self.convb(x)
-        #print("encode 2 Layer: ", x.size())
         x = self.convc(x)
-        #print("encode 3 Layer: ", x.size())
         x = self.convd(x)
-        #print("encode 4 Layer: ", x.size())
-        #print("encode 5 Layer: ", x.size())
         return x
 
 
@@ -194,15 +189,10 @@ class Grad_Decoder(nn.Module):
         self.t_conve = nn.ConvTranspose1d(144, 192, 2, stride=2, padding=1)
 
     def forward(self, x):
-        #print("decode 1 Layer: ", x.size())
         x = self.t_convb(x)
-        #print("decode 2 Layer: ", x.size())
         x = self.t_convc(x)
-        #print("decode 3 Layer: ", x.size())
         x = self.t_convd(x)
-        #print("decode 4 Layer: ", x.size())
         x = self.t_conve(x)
-        #print("decode 4 Layer: ", x.size())
         return x
 
 
@@ -562,12 +552,6 @@ def train_epoch(s, content):
             if train_active:
                 client_encoded.backward(encoder_grad)
                 optimizerencode.step()
-
-            # concat_tensors[concat_counter_recv].to(device)
-            # concat_tensors[concat_counter_recv].backward(client_grad)
-            # client_output_backprob.to(device)
-            # if b % 1000 == 999:
-            #    print("Backprop with: ", client_grad)
             if count_flops:
                 x = high.read_counters() # reset counter
                 flops_rest += x[0]
@@ -842,17 +826,12 @@ def initialize_model(s, msg):
     the initial weights are fetched from the server
     :param conn:
     """
-    #msg = recieve_msg(s)
     if msg == 0:
-        #print("msg == 0")
         pass
     else:
         print("msg != 0")
         client.load_state_dict(msg, strict=False)
         print("model successfully initialized")
-    #print("start_training")
-    # start_training(s)
-    #train_epoch(s)
 
 
 def main():
