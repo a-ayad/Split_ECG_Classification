@@ -15,16 +15,17 @@ import Metrics
 import os.path
 import utils
 import wandb
-
+# Set path variables to load the PTB-XL dataset and its scaler
 cwd = os.path.dirname(os.path.abspath(__file__))
 mlb_path = os.path.join(cwd,  "PTB-XL", "ptb-xl", "output", "mlb.pkl")
 scaler_path = os.path.join(cwd,  "PTB-XL", "ptb-xl", "output", "standard_scaler.pkl/")
 ptb_path = os.path.join(cwd, "PTB-XL", "ptb-xl/")
 
+
+# Set parameters fron json file
 f = open('client\parameter_client.json', )
 data = json.load(f)
 
-# set parameters fron json file
 lr = data["learningrate"]
 batchsize = data["batchsize"]
 host = data["host"]
@@ -39,11 +40,9 @@ train_gradAE_active = data["train_gradAE_active"]
 deactivate_grad_train_after_num_epochs = data["deactivate_grad_train_after_num_epochs"]
 weights_and_biases = 0
 
-
+# Synchronisation with Weights&Biases
 if weights_and_biases:
     wandb.init(project="Basis", entity="split-learning-medical")
-
-if weights_and_biases:
     wandb.init(config={
         "learning_rate": lr,
         "batch_size": batchsize,
@@ -53,6 +52,9 @@ if weights_and_biases:
 
 
 def print_json():
+    """
+    Prints all json settings
+    """
     print("learningrate: ", lr)
     print("grad_encode: ", grad_encode)
     print("gradAE_train: ", train_gradAE_active)
@@ -65,8 +67,11 @@ def print_json():
     print("autoencoder_train: ", autoencoder_train)
     print("deactivate_train_after_num_epochs: ", deactivate_train_after_num_epochs)
 
-# load data from json file
+
 class PTB_XL(Dataset):
+    """
+    Class to load sample-sets (train, val, test)
+    """
     def __init__(self, stage=None):
         self.stage = stage
         if self.stage == 'train':
@@ -104,29 +109,22 @@ class PTB_XL(Dataset):
 
 
 def init():
+    """
+    Innitialization of the training and validation datasets
+    """
     train_dataset = PTB_XL('train')
     val_dataset = PTB_XL('val')
     global train_loader
     global val_loader
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batchsize, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batchsize, shuffle=True)
-"""
-def new_split():
-    global train_loader
-    global val_loader
-    train_dataset, val_dataset = torch.utils.data.random_split(training_dataset,
-                                                               [size_train_dataset,
-                                                                len(training_dataset) - size_train_dataset])
-    print("train_dataset size: ", size_train_dataset)
-    print("val_dataset size: ", len(training_dataset) - size_train_dataset)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batchsize, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batchsize, shuffle=True)
-"""
 
-if count_flops: #Does not work on the Jetson Nano yet. The amount of FLOPs doesn't depend on the architecture. Measuring FLOPs on the PC and JetsonNano would result in the same outcome.
+
+if count_flops: 
+    # Imports to count FLOPs
+    # Does not work on every architecture
     # The paranoid switch prevents the FLOPs count
     # Solution: sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
-    # Needs to be done after every restart of the PC
     from ptflops import get_model_complexity_info
     from pypapi import events, papi_high as high
 
@@ -162,7 +160,7 @@ class Client(nn.Module):
 
 class Encode(nn.Module):
     """
-    encoder model
+    Encoder-Model:
     """
     def __init__(self):
         super(Encode, self).__init__()
@@ -186,7 +184,7 @@ class Encode(nn.Module):
 
 class Grad_Decoder(nn.Module):
     """
-    decoder model
+    Decoder-Model:
     """
     def __init__(self):
         super(Grad_Decoder, self).__init__()
