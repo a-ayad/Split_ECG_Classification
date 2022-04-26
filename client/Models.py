@@ -17,7 +17,6 @@ class Client(nn.Module):
         self.pool2 = nn.MaxPool1d(kernel_size=3, stride=2)
 
     def forward(self, x, drop=True):
-        print("Input: ", x.shape)
         x = self.conv1(x)
         x = self.relu1(x)
         x = self.pool1(x)
@@ -25,7 +24,6 @@ class Client(nn.Module):
         x = self.conv2(x)
         x = self.relu2(x)
         x = self.pool2(x)
-        print("Output: ", x.shape)
         return x
 
 

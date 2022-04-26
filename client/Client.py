@@ -16,6 +16,7 @@ import os.path
 import utils
 import wandb
 import Models
+import Communication
 # Set path variables to load the PTB-XL dataset and its scaler
 cwd = os.path.dirname(os.path.abspath(__file__))
 mlb_path = os.path.join(cwd,  "PTB-XL", "ptb-xl", "output", "mlb.pkl")
@@ -130,87 +131,6 @@ if count_flops:
     from pypapi import events, papi_high as high
 
 
-#send/recieve system:
-def send_msg(sock, getid, content):
-    """
-    pickles the content (creates bitstream), adds header and send message via tcp port
-
-    :param sock: socket
-    :param content: content to send via tcp port
-    """
-    msg = [getid, content]  # add getid
-    msg = pickle.dumps(msg)
-    msg = struct.pack('>I', len(msg)) + msg  # add 4-byte length in network byte order
-    #print("communication overhead send: ", sys.getsizeof(msg), " bytes")
-    global data_send_per_epoch
-    data_send_per_epoch += sys.getsizeof(msg)
-    sock.sendall(msg)
-
-
-def recieve_msg(sock):
-    """
-    recieves the meassage with helper function, umpickles the message and separates the getid from the actual massage content
-    :param sock: socket
-    """
-
-    msg = recv_msg(sock)  # receive client message from socket
-    msg = pickle.loads(msg)
-    return msg
-
-
-def recieve_request(sock):
-    """
-    recieves the meassage with helper function, umpickles the message and separates the getid from the actual massage content
-    :param sock: socket
-    """
-
-    msg = recv_msg(sock)  # receive client message from socket
-    msg = pickle.loads(msg)
-    getid = msg[0]
-    content = msg[1]
-    handle_request(sock, getid, content)
-
-
-def recv_msg(sock):
-    """
-    gets the message length (which corresponds to the first
-    4 bytes of the recieved bytestream) with the recvall function
-
-    :param sock: socket
-    :return: returns the data retrieved from the recvall function
-    """
-    # read message length and unpack it into an integer
-    raw_msglen = recvall(sock, 4)
-    if not raw_msglen:
-        return None
-    msglen = struct.unpack('>I', raw_msglen)[0]
-
-    #print("Message length:", msglen)
-    global data_recieved_per_epoch
-    data_recieved_per_epoch += msglen
-    # read the message data
-    return recvall(sock, msglen)
-
-
-def recvall(sock, n):
-    """
-    returns the data from a recieved bytestream, helper function
-    to receive n bytes or return None if EOF is hit
-    :param sock: socket
-    :param n: length in bytes (number of bytes)
-    :return: message
-    """
-    #
-    data = b''
-    while len(data) < n:
-        packet = sock.recv(n - len(data))
-        if not packet:
-            return None
-        data += packet
-    # print("Daten: ", data)
-    return data
-
-
 def handle_request(sock, getid, content):
     """
     executes the requested function, depending on the get id, and passes the recieved message
@@ -227,6 +147,19 @@ def handle_request(sock, getid, content):
         3: test_stage,
     }
     switcher.get(getid, "invalid request recieved")(sock, content)
+
+
+def recieve_request(sock):
+    """
+    recieves the meassage with helper function, umpickles the message and separates the getid from the actual massage content
+    :param sock: socket
+    """
+
+    msg = Communication.recv_msg(sock)  # receive client message from socket
+    msg = pickle.loads(msg)
+    getid = msg[0]
+    content = msg[1]
+    handle_request(sock, getid, content)
 
 
 def serverHandler(conn):
@@ -272,11 +205,11 @@ def start_training(s, content):
         train_epoch(s)
 
         initial_weights = client.state_dict()
-        send_msg(s, 2, initial_weights)
+        Communication.send_msg(s, 2, initial_weights)
 
         msg = 0
 
-        send_msg(s, 3, msg)
+        Communication.send_msg(s, 3, msg)
 
         if autoencoder:
             if autoencoder_train:
@@ -347,8 +280,7 @@ def train_epoch(s, content):
         if train_gradAE_active:
             train_grad_active = 1
 
-    global data_send_per_epoch, data_recieved_per_epoch, data_send_per_epoch_total, data_recieved_per_epoch_total
-    data_send_per_epoch, data_recieved_per_epoch = 0, 0
+    Communication.reset_tracker()
     correct_train, total_train, train_loss = 0, 0, 0
     batches_aborted, total_train_nr, total_val_nr, total_test_nr = 0, 0, 0, 0
     hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc_train = 0, 0, 0, 0, 0
@@ -420,14 +352,14 @@ def train_epoch(s, content):
             'grad_encode': grad_encode
         }
         active_training_time_batch_client += time.time() - start_time_batch_forward
-        send_msg(s, 0, msg)
+        Communication.send_msg(s, 0, msg)
 
         if count_flops:
             x = high.read_counters()  # reset counter
             flops_send += x[0]
 
         # while concat_counter_recv < concat_counter_send:
-        msg = recieve_msg(s)
+        msg = Communication.recieve_msg(s)
         client_grad_without_encode = msg["client_grad_without_encode"]
         client_grad = msg["grad_client"]
         # print("msg: ", msg)
@@ -541,7 +473,7 @@ def train_epoch(s, content):
 
         hamming_epoch += Metrics.Accuracy(label_train.detach().clone().cpu(), output.detach().clone().cpu())#accuracy_score(label_train.detach().clone().cpu(), output.detach().clone().cpu())
         precision_epoch += precision_score(label_train.detach().clone().cpu(),
-                                           output.detach().clone().cpu(), average='micro')
+                                           output.detach().clone().cpu(), average='micro', zero_division=0)
         recall_epoch += recall_score(label_train.detach().clone().cpu(), output.detach().clone().cpu(), average='micro')
         f1_epoch += f1_score(label_train.detach().clone().cpu(), output.detach().clone().cpu(), average='micro')
 
@@ -553,10 +485,10 @@ def train_epoch(s, content):
     flops_client_rest_total.append(flops_rest)
 
 
-    print("data_send_per_epoch: ", data_send_per_epoch / 1000000, " MegaBytes")
-    print("data_recieved_per_epoch: ", data_recieved_per_epoch / 1000000, "MegaBytes")
-    data_send_per_epoch_total.append(data_send_per_epoch)
-    data_recieved_per_epoch_total.append(data_recieved_per_epoch)
+    print("data_send_per_epoch: ", Communication.get_data_send_per_epoch() / 1000000, " MegaBytes")
+    print("data_recieved_per_epoch: ", Communication.get_data_recieved_per_epoch() / 1000000, "MegaBytes")
+    data_send_per_epoch_total.append(Communication.get_data_send_per_epoch())
+    data_recieved_per_epoch_total.append(Communication.get_data_recieved_per_epoch())
 
     epoch_endtime = time.time() - epoch_start_time
     status_epoch_train = "epoch: {}, AUC_train: {:.4f}, Accuracy_micro: {:.4f}, Precision: {:.4f}, Recall: {:.4f}, F1: {:.4f}, trainingtime for epoch: {:.6f}s, batches abortrate:{:.2f}, train_loss: {:.4f}  ".format(
@@ -586,11 +518,11 @@ def train_epoch(s, content):
     batches_abort_rate_total.append(batches_aborted / total_train_nr)
 
     initial_weights = client.state_dict()
-    send_msg(s, 2, initial_weights)
+    Communication.send_msg(s, 2, initial_weights)
 
     msg = 0
 
-    send_msg(s, 3, msg)
+    Communication.send_msg(s, 3, msg)
 
 
 def val_stage(s, content):
@@ -612,8 +544,8 @@ def val_stage(s, content):
             msg = {'client_output_val/test': client_output_val,
                    'label_val/test': label_val,
                    }
-            send_msg(s, 1, msg)
-            msg = recieve_msg(s)
+            Communication.send_msg(s, 1, msg)
+            msg = Communication.recieve_msg(s)
             correct_val_add = msg["correct_val/test"]
             val_loss = msg["val/test_loss"]
             output_val_server = msg["output_val/test_server"]
@@ -660,7 +592,7 @@ def val_stage(s, content):
     print("status_epoch_val: ", status_epoch_val)
 
     msg = 0
-    send_msg(s, 3, msg)
+    Communication.send_msg(s, 3, msg)
 
 
 def test_stage(s, epoch):
@@ -684,8 +616,8 @@ def test_stage(s, epoch):
             msg = {'client_output_val/test': client_output_test,
                    'label_val/test': label_test,
                    }
-            send_msg(s, 1, msg)
-            msg = recieve_msg(s)
+            Communication.send_msg(s, 1, msg)
+            msg = Communication.recieve_msg(s)
             correct_test_add = msg["correct_val/test"]
             test_loss = msg["val/test_loss"]
             output_test_server = msg["output_val/test_server"]
@@ -699,7 +631,7 @@ def test_stage(s, epoch):
             hamming_epoch += accuracy_score(label_test.detach().clone().cpu(),
                                             output_test_server.detach().clone().cpu())
             precision_epoch += precision_score(label_test.detach().clone().cpu(),
-                                               output_test_server.detach().clone().cpu(), average='micro')
+                                               output_test_server.detach().clone().cpu(), average='micro', zero_division=0)
             recall_epoch += recall_score(label_test.detach().clone().cpu(), output_test_server.detach().clone().cpu(),
                                          average='micro')
             f1_epoch += f1_score(label_test.detach().clone().cpu(), output_test_server.detach().clone().cpu(), average='micro')
@@ -751,7 +683,7 @@ def test_stage(s, epoch):
                          "total_MegaFLOPS_backprob": total_flops_backprob/1000000,"total_MegaFLOPS modal": total_flops_model/1000000 ,"total_MegaFLOPS": total_flops_all/1000000})
 
     msg = 0
-    send_msg(s, 3, msg)
+    Communication.send_msg(s, 3, msg)
 
 
 def initialize_model(s, msg):
