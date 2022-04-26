@@ -42,7 +42,7 @@ client_weights_available = 0
 
 class Decode(nn.Module):
     """
-    decoder model
+    Decoder model
     """
     def __init__(self):
         super(Decode, self).__init__()
@@ -61,7 +61,7 @@ class Decode(nn.Module):
 
 class Grad_Encoder(nn.Module):
     """
-    encoder model
+    Encoder model
     """
     def __init__(self):
         super(Grad_Encoder, self).__init__()
@@ -80,7 +80,7 @@ class Grad_Encoder(nn.Module):
 
 class Server(nn.Module):
     """
-    client model
+    Server model
     """
     def __init__(self):
         super(Server, self).__init__()

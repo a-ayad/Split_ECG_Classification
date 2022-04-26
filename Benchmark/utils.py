@@ -4,7 +4,6 @@ import re
 import glob
 import pickle
 import copy
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,58 +14,6 @@ from sklearn.metrics import fbeta_score, roc_auc_score, roc_curve, roc_curve, au
 from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
 from matplotlib.axes._axes import _log as matplotlib_axes_logger
 import warnings
-
-
-# EVALUATION STUFF
-def generate_results(idxs, y_true, y_pred, thresholds):
-    return evaluate_experiment(y_true[idxs], y_pred[idxs], thresholds)
-
-
-def evaluate_experiment(y_true, y_pred, thresholds=None):
-    results = {}
-
-    if not thresholds is None:
-        # binary predictions
-        y_pred_binary = apply_thresholds(y_pred, thresholds)
-        # PhysioNet/CinC Challenges metrics
-        challenge_scores = challenge_metrics(y_true, y_pred_binary, beta1=2, beta2=2)
-        results['F_beta_macro'] = challenge_scores['F_beta_macro']
-        results['G_beta_macro'] = challenge_scores['G_beta_macro']
-
-    # label based metric
-    results['macro_auc'] = roc_auc_score(y_true, y_pred, average='macro')
-
-    df_result = pd.DataFrame(results, index=[0])
-    return df_result
-
-
-def challenge_metrics(y_true, y_pred, beta1=2, beta2=2, class_weights=None, single=False):
-    f_beta = 0
-    g_beta = 0
-    if single:  # if evaluating single class in case of threshold-optimization
-        sample_weights = np.ones(y_true.sum(axis=1).shape)
-    else:
-        sample_weights = y_true.sum(axis=1)
-    for classi in range(y_true.shape[1]):
-        y_truei, y_predi = y_true[:, classi], y_pred[:, classi]
-        TP, FP, TN, FN = 0., 0., 0., 0.
-        for i in range(len(y_predi)):
-            sample_weight = sample_weights[i]
-            if y_truei[i] == y_predi[i] == 1:
-                TP += 1. / sample_weight
-            if ((y_predi[i] == 1) and (y_truei[i] != y_predi[i])):
-                FP += 1. / sample_weight
-            if y_truei[i] == y_predi[i] == 0:
-                TN += 1. / sample_weight
-            if ((y_predi[i] == 0) and (y_truei[i] != y_predi[i])):
-                FN += 1. / sample_weight
-        f_beta_i = ((1 + beta1 ** 2) * TP) / ((1 + beta1 ** 2) * TP + FP + (beta1 ** 2) * FN)
-        g_beta_i = (TP) / (TP + FP + beta2 * FN)
-
-        f_beta += f_beta_i
-        g_beta += g_beta_i
-
-    return {'F_beta_macro': f_beta / y_true.shape[1], 'G_beta_macro': g_beta / y_true.shape[1]}
 
 
 def get_appropriate_bootstrap_samples(y_true, n_bootstraping_samples):
@@ -92,19 +39,6 @@ def find_optimal_cutoff_threshold(target, predicted):
 
 def find_optimal_cutoff_thresholds(y_true, y_pred):
     return [find_optimal_cutoff_threshold(y_true[:, i], y_pred[:, i]) for i in range(y_true.shape[1])]
-
-
-def find_optimal_cutoff_threshold_for_Gbeta(target, predicted, n_thresholds=100):
-    thresholds = np.linspace(0.00, 1, n_thresholds)
-    scores = [challenge_metrics(target, predicted > t, single=True)['G_beta_macro'] for t in thresholds]
-    optimal_idx = np.argmax(scores)
-    return thresholds[optimal_idx]
-
-
-def find_optimal_cutoff_thresholds_for_Gbeta(y_true, y_pred):
-    print("optimize thresholds with respect to G_beta")
-    return [find_optimal_cutoff_threshold_for_Gbeta(y_true[:, k][:, np.newaxis], y_pred[:, k][:, np.newaxis]) for k in
-            tqdm(range(y_true.shape[1]))]
 
 
 def apply_thresholds(preds, thresholds):
@@ -183,32 +117,6 @@ def load_raw_data_ptbxl(df, sampling_rate, path):
             pickle.dump(data, open(path + 'raw500.npy', 'wb'), protocol=4)
     return data
 
-
-"""
-def compute_label_aggregations(df, folder, ctype):
-    df['scp_codes_len'] = df.scp_codes.apply(lambda x: len(x))
-
-    aggregation_df = pd.read_csv(folder + 'scp_statements.csv', index_col=0)
-
-    # print("agg_df: ", agg_df)
-    diag_agg_df = aggregation_df[aggregation_df.diagnostic == 1.0]
-
-    # print("dataloader: ", time.time()-start_dataloading)
-
-    def aggregate_diagnostic(y_dic):
-        tmp = []
-        for key in y_dic.keys():
-            if key in aggregation_df.index:
-                c = diag_agg_df.loc[key].diagnostic_class
-                if str(c) != 'nan':
-                    tmp.append(c)
-        return list(set(tmp))
-
-    df['superdiagnostic'] = df.scp_codes.apply(aggregate_diagnostic)
-    df['superdiagnostic_len'] = df.superdiagnostic.apply(lambda x: len(x))
-
-    return df
-"""
 
 def compute_label_aggregations(df, folder, ctype):
 
@@ -376,115 +284,3 @@ def apply_standardizer(X, ss):
         X_tmp.append(ss.transform(x.flatten()[:, np.newaxis]).reshape(x_shape))
     X_tmp = np.array(X_tmp)
     return X_tmp
-
-
-# DOCUMENTATION STUFF
-
-def generate_ptbxl_summary_table(selection=None, folder='../output/'):
-    exps = ['exp0', 'exp1', 'exp1.1', 'exp1.1.1', 'exp2', 'exp3']
-    metric1 = 'macro_auc'
-
-    # get models
-    models = {}
-    for i, exp in enumerate(exps):
-        if selection is None:
-            exp_models = [m.split('/')[-1] for m in glob.glob(folder + str(exp) + '/models/*')]
-        else:
-            exp_models = selection
-        if i == 0:
-            models = set(exp_models)
-        else:
-            models = models.union(set(exp_models))
-
-    results_dic = {'Method': [],
-                   'exp0_AUC': [],
-                   'exp1_AUC': [],
-                   'exp1.1_AUC': [],
-                   'exp1.1.1_AUC': [],
-                   'exp2_AUC': [],
-                   'exp3_AUC': []
-                   }
-
-    for m in models:
-        results_dic['Method'].append(m)
-
-        for e in exps:
-
-            try:
-                me_res = pd.read_csv(folder + str(e) + '/models/' + str(m) + '/results/te_results.csv', index_col=0)
-
-                mean1 = me_res.loc['point'][metric1]
-                unc1 = max(me_res.loc['upper'][metric1] - me_res.loc['point'][metric1],
-                           me_res.loc['point'][metric1] - me_res.loc['lower'][metric1])
-
-                results_dic[e + '_AUC'].append("%.3f(%.2d)" % (np.round(mean1, 3), int(unc1 * 1000)))
-
-            except FileNotFoundError:
-                results_dic[e + '_AUC'].append("--")
-
-    df = pd.DataFrame(results_dic)
-    df_index = df[df.Method.isin(['naive', 'ensemble'])]
-    df_rest = df[~df.Method.isin(['naive', 'ensemble'])]
-    df = pd.concat([df_rest, df_index])
-    df.to_csv(folder + 'results_ptbxl.csv')
-
-    titles = [
-        '### 1. PTB-XL: all statements',
-        '### 2. PTB-XL: diagnostic statements',
-        '### 3. PTB-XL: Diagnostic subclasses',
-        '### 4. PTB-XL: Diagnostic superclasses',
-        '### 5. PTB-XL: Form statements',
-        '### 6. PTB-XL: Rhythm statements'
-    ]
-
-    # helper output function for markdown tables
-    our_work = 'https://arxiv.org/abs/2004.13701'
-    our_repo = 'https://github.com/helme/ecg_ptbxl_benchmarking/'
-    md_source = ''
-    for i, e in enumerate(exps):
-        md_source += '\n ' + titles[i] + ' \n \n'
-        md_source += '| Model | AUC &darr; | paper/source | code | \n'
-        md_source += '|---:|:---|:---|:---| \n'
-        for row in df_rest[['Method', e + '_AUC']].sort_values(e + '_AUC', ascending=False).values:
-            md_source += '| ' + row[0].replace('fastai_', '') + ' | ' + row[
-                1] + ' | [our work](' + our_work + ') | [this repo](' + our_repo + ')| \n'
-    print(md_source)
-
-
-def ICBEBE_table(selection=None, folder='../output/'):
-    cols = ['macro_auc', 'F_beta_macro', 'G_beta_macro']
-
-    if selection is None:
-        models = [m.split('/')[-1].split('_pretrained')[0] for m in glob.glob(folder + 'exp_ICBEB/models/*')]
-    else:
-        models = []
-        for s in selection:
-            # if s != 'Wavelet+NN':
-            models.append(s)
-
-    data = []
-    for model in models:
-        me_res = pd.read_csv(folder + 'exp_ICBEB/models/' + model + '/results/te_results.csv', index_col=0)
-        mcol = []
-        for col in cols:
-            mean = me_res.ix['point'][col]
-            unc = max(me_res.ix['upper'][col] - me_res.ix['point'][col],
-                      me_res.ix['point'][col] - me_res.ix['lower'][col])
-            mcol.append("%.3f(%.2d)" % (np.round(mean, 3), int(unc * 1000)))
-        data.append(mcol)
-    data = np.array(data)
-
-    df = pd.DataFrame(data, columns=cols, index=models)
-    df.to_csv(folder + 'results_icbeb.csv')
-
-    df_rest = df[~df.index.isin(['naive', 'ensemble'])]
-    df_rest = df_rest.sort_values('macro_auc', ascending=False)
-    our_work = 'https://arxiv.org/abs/2004.13701'
-    our_repo = 'https://github.com/helme/ecg_ptbxl_benchmarking/'
-
-    md_source = '| Model | AUC &darr; |  F_beta=2 | G_beta=2 | paper/source | code | \n'
-    md_source += '|---:|:---|:---|:---|:---|:---| \n'
-    for i, row in enumerate(df_rest[cols].values):
-        md_source += '| ' + df_rest.index[i].replace('fastai_', '') + ' | ' + row[0] + ' | ' + row[1] + ' | ' + row[
-            2] + ' | [our work](' + our_work + ') | [this repo](' + our_repo + ')| \n'
-    print(md_source)
