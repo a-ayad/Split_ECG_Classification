@@ -72,7 +72,6 @@ Furthermore at the client, the computed FLOPs can be measured.
 To reproduce the different experiments, here the autoencoder can be activated or deactivated (settings: (1 or 0)).
 
 
-
 ### Set serverside configurations
 
 To set the server side configuraitons, the file parameter_server.json can be edited.  
@@ -96,20 +95,19 @@ The initial settings are:
 ```
 
 max_nr_clients is the maximal number of clients, that can be connected to the server at the same time.
-
 To configer the server, the host is initially set to "0.0.0.0" (localhost).
 Also the Port has to be set.
-
 The max_recv property is the bit rate of the tcp port.
 
 One can set the server side learningrate manually (in all the configurations of the corresponding paper, the same learning rate for server and client was chosen).
+
 
 Also, the update_mechanism can be configured (static or adaptive):
 In the static setting: 
 If the loss of a batch exceeds this threshold, the gradients are not sent back to the client (client side update skipped).
 In the adaptive setting:
 Change the mechanism to "linear", "sigmoid" or "none":
-The adaptive threshold changees over the course of training and according to the value of the mechanism function, a percentage of updates per epoch are skipped.
+The adaptive threshold changes over the course of training and according to the value of the mechanism, a percentage of updates per epoch are skipped.
 
 ### Running the model
 
@@ -117,10 +115,6 @@ To run the model, the server.py script has to be run the server. Afterwards, the
 
 
 
-
-## Advanced settings
-
-To do advanced configurations, plase follow the instructions in the document advanced_settings.pdf
 
 ## Authors
 Ahmad Ayad, Marian Frei, Melvin Renner, Zhenghang Zhong
