@@ -5,86 +5,75 @@ import json
 from torch.optim import SGD, Adam, AdamW
 import sys
 import time
-import random
 import numpy as np # linear algebra
-import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
-import matplotlib.pyplot as plt
-#import seaborn as sns
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torch.autograd import Variable
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import precision_recall_curve
-from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.metrics import accuracy_score, auc, f1_score, precision_score, recall_score, roc_auc_score
-from sklearn.preprocessing import MinMaxScaler
-import Plots
-import wfdb
-import ast
-import math
+import Metrics
 import os.path
 import utils
-#np.set_printoptions(threshold=np.inf)
+import wandb
+import Models
+import Communication
+# Set path variables to load the PTB-XL dataset and its scaler
 cwd = os.path.dirname(os.path.abspath(__file__))
 mlb_path = os.path.join(cwd,  "PTB-XL", "ptb-xl", "output", "mlb.pkl")
 scaler_path = os.path.join(cwd,  "PTB-XL", "ptb-xl", "output", "standard_scaler.pkl/")
 ptb_path = os.path.join(cwd, "PTB-XL", "ptb-xl/")
 
-import wandb
 
-wandb.init(project="Basis", entity="split-learning-medical")
-
-f = open('parameter_client.json', )
+# Set parameters fron json file
+f = open('client\parameter_client.json', )
 data = json.load(f)
 
-# set parameters fron json file
-#epoch = data["training_epochs"]
 lr = data["learningrate"]
 batchsize = data["batchsize"]
-batch_concat = data["batch_concat"]
 host = data["host"]
 port = data["port"]
 max_recv = data["max_recv"]
 autoencoder = data["autoencoder"]
-detailed_output = data["detailed_output"]
 count_flops = data["count_flops"]
-plots = data["plots"]
 autoencoder_train = data["autoencoder_train"]
 deactivate_train_after_num_epochs = data["deactivate_train_after_num_epochs"]
 grad_encode = data["grad_encode"]
 train_gradAE_active = data["train_gradAE_active"]
 deactivate_grad_train_after_num_epochs = data["deactivate_grad_train_after_num_epochs"]
+weights_and_biases = 0
 
-wandb.init(config={
-  "learning_rate": lr,
-  #"epochs": epoch,
-  "batch_size": batchsize,
-    "autoencoder": autoencoder
-})
-
-wandb.config.update({"learning_rate": lr, "PC: ": 2})
+# Synchronisation with Weights&Biases
+if weights_and_biases:
+    wandb.init(project="Basis", entity="split-learning-medical")
+    wandb.init(config={
+        "learning_rate": lr,
+        "batch_size": batchsize,
+        "autoencoder": autoencoder
+    })
+    wandb.config.update({"learning_rate": lr, "PC: ": 2})
 
 
 def print_json():
+    """
+    Prints all json settings
+    """
     print("learningrate: ", lr)
     print("grad_encode: ", grad_encode)
     print("gradAE_train: ", train_gradAE_active)
     print("deactivate_grad_train_after_num_epochs: ", deactivate_grad_train_after_num_epochs)
-    #print("Getting the metadata epoch: ", epoch)
     print("Getting the metadata host: ", host)
     print("Getting the metadata port: ", port)
     print("Getting the metadata batchsize: ", batchsize)
     print("Autoencoder: ", autoencoder)
-    print("detailed_output: ", detailed_output)
     print("count_flops: ", count_flops)
-    print("plots: ", plots)
     print("autoencoder_train: ", autoencoder_train)
     print("deactivate_train_after_num_epochs: ", deactivate_train_after_num_epochs)
 
-# load data from json file
+
 class PTB_XL(Dataset):
+    """
+    Class to load sample-sets (train, val, test)
+    """
     def __init__(self, stage=None):
         self.stage = stage
         if self.stage == 'train':
@@ -122,207 +111,24 @@ class PTB_XL(Dataset):
 
 
 def init():
+    """
+    Innitialization of the training and validation datasets
+    """
     train_dataset = PTB_XL('train')
     val_dataset = PTB_XL('val')
     global train_loader
     global val_loader
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batchsize, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batchsize, shuffle=True)
-"""
-def new_split():
-    global train_loader
-    global val_loader
-    train_dataset, val_dataset = torch.utils.data.random_split(training_dataset,
-                                                               [size_train_dataset,
-                                                                len(training_dataset) - size_train_dataset])
-    print("train_dataset size: ", size_train_dataset)
-    print("val_dataset size: ", len(training_dataset) - size_train_dataset)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batchsize, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batchsize, shuffle=True)
-"""
 
-if count_flops: #Does not work on the Jetson Nano yet. The amount of FLOPs doesn't depend on the architecture. Measuring FLOPs on the PC and JetsonNano would result in the same outcome.
+
+if count_flops:
+    # Imports to count FLOPs
+    # Does not work on every architecture
     # The paranoid switch prevents the FLOPs count
     # Solution: sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
-    # Needs to be done after every restart of the PC
     from ptflops import get_model_complexity_info
     from pypapi import events, papi_high as high
-
-
-def str_to_number(label):
-    a = np.zeros(5)
-    if not label:
-        return a
-    for i in label:
-        if i == 'NORM':
-            a[0] = 1
-        if i == 'MI':
-            a[1] = 1
-        if i == 'STTC':
-            a[2] = 1
-        if i == 'HYP':
-            a[3] = 1
-        if i == 'CD':
-            a[4] = 1
-    return a
-
-
-class Client(nn.Module):
-    """
-    Client-Model:
-    """
-    def __init__(self, training=True):
-        super(Client, self).__init__()
-        self.conv1 = nn.Conv1d(12, 192, kernel_size=3, stride=2, dilation=1, padding=1)
-        nn.init.kaiming_normal_(self.conv1.weight, mode='fan_out', nonlinearity='relu')
-        self.relu1 = nn.ReLU()
-        self.pool1 = nn.MaxPool1d(kernel_size=3, stride=2)
-        self.drop1 = nn.Dropout(0.4, training)
-        self.conv2 = nn.Conv1d(192, 192, kernel_size=3, stride=2, dilation=1, padding=1)
-        nn.init.kaiming_normal_(self.conv2.weight, mode='fan_out', nonlinearity='relu')
-        self.relu2 = nn.ReLU()
-        self.pool2 = nn.MaxPool1d(kernel_size=3, stride=2)
-
-    def forward(self, x, drop=True):
-        x = self.conv1(x)
-        x = self.relu1(x)
-        x = self.pool1(x)
-        if drop == True: x = self.drop1(x)
-        x = self.conv2(x)
-        x = self.relu2(x)
-        x = self.pool2(x)
-        return x
-
-
-class Encode(nn.Module):
-    """
-    encoder model
-    """
-    def __init__(self):
-        super(Encode, self).__init__()
-        self.conva = nn.Conv1d(192, 144, 2, stride=2,  padding=1)
-        self.convb = nn.Conv1d(144, 96, 2, stride=2, padding=0)
-        self.convc = nn.Conv1d(96, 48, 2, stride=2,  padding=0)
-        self.convd = nn.Conv1d(48, 24, 2, stride=2, padding=0)##
-
-    def forward(self, x):
-        x = self.conva(x)
-        #print("encode 1 Layer: ", x.size())
-        x = self.convb(x)
-        #print("encode 2 Layer: ", x.size())
-        x = self.convc(x)
-        #print("encode 3 Layer: ", x.size())
-        x = self.convd(x)
-        #print("encode 4 Layer: ", x.size())
-        #print("encode 5 Layer: ", x.size())
-        return x
-
-
-class Grad_Decoder(nn.Module):
-    """
-    decoder model
-    """
-    def __init__(self):
-        super(Grad_Decoder, self).__init__()
-        self.t_convb = nn.ConvTranspose1d(24, 48, 2, stride=2, padding=0)
-        self.t_convc = nn.ConvTranspose1d(48, 96, 2, stride=2, padding=0)
-        self.t_convd = nn.ConvTranspose1d(96, 144, 2, stride=2, padding=0)
-        self.t_conve = nn.ConvTranspose1d(144, 192, 2, stride=2, padding=1)
-
-    def forward(self, x):
-        #print("decode 1 Layer: ", x.size())
-        x = self.t_convb(x)
-        #print("decode 2 Layer: ", x.size())
-        x = self.t_convc(x)
-        #print("decode 3 Layer: ", x.size())
-        x = self.t_convd(x)
-        #print("decode 4 Layer: ", x.size())
-        x = self.t_conve(x)
-        #print("decode 4 Layer: ", x.size())
-        return x
-
-
-#send/recieve system:
-def send_msg(sock, getid, content):
-    """
-    pickles the content (creates bitstream), adds header and send message via tcp port
-
-    :param sock: socket
-    :param content: content to send via tcp port
-    """
-    msg = [getid, content]  # add getid
-    msg = pickle.dumps(msg)
-    msg = struct.pack('>I', len(msg)) + msg  # add 4-byte length in network byte order
-    #print("communication overhead send: ", sys.getsizeof(msg), " bytes")
-    global data_send_per_epoch
-    data_send_per_epoch += sys.getsizeof(msg)
-    sock.sendall(msg)
-
-
-def recieve_msg(sock):
-    """
-    recieves the meassage with helper function, umpickles the message and separates the getid from the actual massage content
-    :param sock: socket
-    """
-
-    msg = recv_msg(sock)  # receive client message from socket
-    msg = pickle.loads(msg)
-    return msg
-
-
-def recieve_request(sock):
-    """
-    recieves the meassage with helper function, umpickles the message and separates the getid from the actual massage content
-    :param sock: socket
-    """
-
-    msg = recv_msg(sock)  # receive client message from socket
-    msg = pickle.loads(msg)
-    getid = msg[0]
-    content = msg[1]
-    handle_request(sock, getid, content)
-
-
-def recv_msg(sock):
-    """
-    gets the message length (which corresponds to the first
-    4 bytes of the recieved bytestream) with the recvall function
-
-    :param sock: socket
-    :return: returns the data retrieved from the recvall function
-    """
-    # read message length and unpack it into an integer
-    raw_msglen = recvall(sock, 4)
-    if not raw_msglen:
-        return None
-    msglen = struct.unpack('>I', raw_msglen)[0]
-
-    #print("Message length:", msglen)
-    global data_recieved_per_epoch
-    data_recieved_per_epoch += msglen
-    # read the message data
-    return recvall(sock, msglen)
-
-
-def recvall(sock, n):
-    """
-    returns the data from a recieved bytestream, helper function
-    to receive n bytes or return None if EOF is hit
-    :param sock: socket
-    :param n: length in bytes (number of bytes)
-    :return: message
-    """
-    #
-    data = b''
-    while len(data) < n:
-        if detailed_output:
-            print("Start function sock.recv")
-        packet = sock.recv(n - len(data))
-        if not packet:
-            return None
-        data += packet
-    # print("Daten: ", data)
-    return data
 
 
 def handle_request(sock, getid, content):
@@ -341,6 +147,19 @@ def handle_request(sock, getid, content):
         3: test_stage,
     }
     switcher.get(getid, "invalid request recieved")(sock, content)
+
+
+def recieve_request(sock):
+    """
+    recieves the meassage with helper function, umpickles the message and separates the getid from the actual massage content
+    :param sock: socket
+    """
+
+    msg = Communication.recv_msg(sock)  # receive client message from socket
+    msg = pickle.loads(msg)
+    getid = msg[0]
+    content = msg[1]
+    handle_request(sock, getid, content)
 
 
 def serverHandler(conn):
@@ -386,11 +205,11 @@ def start_training(s, content):
         train_epoch(s)
 
         initial_weights = client.state_dict()
-        send_msg(s, 2, initial_weights)
+        Communication.send_msg(s, 2, initial_weights)
 
         msg = 0
 
-        send_msg(s, 3, msg)
+        Communication.send_msg(s, 3, msg)
 
         if autoencoder:
             if autoencoder_train:
@@ -461,8 +280,7 @@ def train_epoch(s, content):
         if train_gradAE_active:
             train_grad_active = 1
 
-    global data_send_per_epoch, data_recieved_per_epoch, data_send_per_epoch_total, data_recieved_per_epoch_total
-    data_send_per_epoch, data_recieved_per_epoch = 0, 0
+    Communication.reset_tracker()
     correct_train, total_train, train_loss = 0, 0, 0
     batches_aborted, total_train_nr, total_val_nr, total_test_nr = 0, 0, 0, 0
     hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc_train = 0, 0, 0, 0, 0
@@ -527,7 +345,6 @@ def train_epoch(s, content):
             'client_output_train': client_output_send,
             'client_output_train_without_ae': client_output_train_without_ae_send,
             'label_train': label_train,  # concat_labels,
-            'batch_concat': batch_concat,
             'batchsize': batchsize,
             'train_active': train_active,
             'encoder_grad_server': encoder_grad_server,
@@ -535,21 +352,20 @@ def train_epoch(s, content):
             'grad_encode': grad_encode
         }
         active_training_time_batch_client += time.time() - start_time_batch_forward
-        if detailed_output:
-            print("Send the message to server")
-        send_msg(s, 0, msg)
+        Communication.send_msg(s, 0, msg)
 
         if count_flops:
             x = high.read_counters()  # reset counter
             flops_send += x[0]
 
         # while concat_counter_recv < concat_counter_send:
-        msg = recieve_msg(s)
+        msg = Communication.recieve_msg(s)
         client_grad_without_encode = msg["client_grad_without_encode"]
         client_grad = msg["grad_client"]
         # print("msg: ", msg)
-        wandb.log({"dropout_threshold": msg["dropout_threshold"]},
-                  commit=False)
+        if weights_and_biases:
+            wandb.log({"dropout_threshold": msg["dropout_threshold"]},
+                      commit=False)
 
         if count_flops:
             x = high.read_counters()  # reset counter
@@ -602,12 +418,6 @@ def train_epoch(s, content):
             if train_active:
                 client_encoded.backward(encoder_grad)
                 optimizerencode.step()
-
-            # concat_tensors[concat_counter_recv].to(device)
-            # concat_tensors[concat_counter_recv].backward(client_grad)
-            # client_output_backprob.to(device)
-            # if b % 1000 == 999:
-            #    print("Backprop with: ", client_grad)
             if count_flops:
                 x = high.read_counters() # reset counter
                 flops_rest += x[0]
@@ -634,6 +444,7 @@ def train_epoch(s, content):
 
         # wandb.watch(client, log_freq=100)
         output = torch.round(output_train)
+
         # if np.sum(label.cpu().detach().numpy()[0]) > 1:
         #    if np.sum(output.cpu().detach().numpy()[0] > 1):
         #        print("output[0]: ", output.cpu().detach().numpy()[0])
@@ -660,9 +471,9 @@ def train_epoch(s, content):
             # print("output: ", output)
             pass
 
-        hamming_epoch += Plots.Accuracy(label_train.detach().clone().cpu(), output.detach().clone().cpu())#accuracy_score(label_train.detach().clone().cpu(), output.detach().clone().cpu())
+        hamming_epoch += Metrics.Accuracy(label_train.detach().clone().cpu(), output.detach().clone().cpu())#accuracy_score(label_train.detach().clone().cpu(), output.detach().clone().cpu())
         precision_epoch += precision_score(label_train.detach().clone().cpu(),
-                                           output.detach().clone().cpu(), average='micro')
+                                           output.detach().clone().cpu(), average='micro', zero_division=0)
         recall_epoch += recall_score(label_train.detach().clone().cpu(), output.detach().clone().cpu(), average='micro')
         f1_epoch += f1_score(label_train.detach().clone().cpu(), output.detach().clone().cpu(), average='micro')
 
@@ -674,10 +485,10 @@ def train_epoch(s, content):
     flops_client_rest_total.append(flops_rest)
 
 
-    print("data_send_per_epoch: ", data_send_per_epoch / 1000000, " MegaBytes")
-    print("data_recieved_per_epoch: ", data_recieved_per_epoch / 1000000, "MegaBytes")
-    data_send_per_epoch_total.append(data_send_per_epoch)
-    data_recieved_per_epoch_total.append(data_recieved_per_epoch)
+    print("data_send_per_epoch: ", Communication.get_data_send_per_epoch() / 1000000, " MegaBytes")
+    print("data_recieved_per_epoch: ", Communication.get_data_recieved_per_epoch() / 1000000, "MegaBytes")
+    data_send_per_epoch_total.append(Communication.get_data_send_per_epoch())
+    data_recieved_per_epoch_total.append(Communication.get_data_recieved_per_epoch())
 
     epoch_endtime = time.time() - epoch_start_time
     status_epoch_train = "epoch: {}, AUC_train: {:.4f}, Accuracy_micro: {:.4f}, Precision: {:.4f}, Recall: {:.4f}, F1: {:.4f}, trainingtime for epoch: {:.6f}s, batches abortrate:{:.2f}, train_loss: {:.4f}  ".format(
@@ -692,11 +503,12 @@ def train_epoch(s, content):
     print("MegaFLOPS_send", flops_send/1000000)
     print("MegaFLOPS_recieve", flops_recieve/1000000)
 
-    wandb.log({"Batches Abortrate": batches_aborted / total_train_nr, "MegaFLOPS Client Encoder": flops_encoder_epoch/1000000,
-               "MegaFLOPS Client Forward": flops_forward_epoch / 1000000,
-               "MegaFLOPS Client Backprop": flops_backprop_epoch / 1000000, "MegaFLOPS Send": flops_send / 1000000,
-               "MegaFLOPS Recieve": flops_recieve / 1000000},
-              commit=False)
+    if weights_and_biases:
+        wandb.log({"Batches Abortrate": batches_aborted / total_train_nr, "MegaFLOPS Client Encoder": flops_encoder_epoch/1000000,
+                   "MegaFLOPS Client Forward": flops_forward_epoch / 1000000,
+                   "MegaFLOPS Client Backprop": flops_backprop_epoch / 1000000, "MegaFLOPS Send": flops_send / 1000000,
+                   "MegaFLOPS Recieve": flops_recieve / 1000000},
+                  commit=False)
 
     global auc_train_log
     auc_train_log = auc_train / total_train_nr
@@ -706,11 +518,11 @@ def train_epoch(s, content):
     batches_abort_rate_total.append(batches_aborted / total_train_nr)
 
     initial_weights = client.state_dict()
-    send_msg(s, 2, initial_weights)
+    Communication.send_msg(s, 2, initial_weights)
 
     msg = 0
 
-    send_msg(s, 3, msg)
+    Communication.send_msg(s, 3, msg)
 
 
 def val_stage(s, content):
@@ -732,14 +544,8 @@ def val_stage(s, content):
             msg = {'client_output_val/test': client_output_val,
                    'label_val/test': label_val,
                    }
-            if detailed_output:
-                print("The msg is:", msg)
-            send_msg(s, 1, msg)
-            if detailed_output:
-                print("294: send_msg success!")
-            msg = recieve_msg(s)
-            if detailed_output:
-                print("296: recieve_msg success!")
+            Communication.send_msg(s, 1, msg)
+            msg = Communication.recieve_msg(s)
             correct_val_add = msg["correct_val/test"]
             val_loss = msg["val/test_loss"]
             output_val_server = msg["output_val/test_server"]
@@ -761,8 +567,8 @@ def val_stage(s, content):
             output_val_server = torch.round(output_val_server)
             accuracy_sklearn += accuracy_score(label_val.detach().clone().cpu(),
                                             output_val_server.detach().clone().cpu())
-            accuracy_custom += Plots.Accuracy(label_val.detach().clone().cpu(),
-                                            output_val_server.detach().clone().cpu())
+            accuracy_custom += Metrics.Accuracy(label_val.detach().clone().cpu(),
+                                                output_val_server.detach().clone().cpu())
             precision_epoch += precision_score(label_val.detach().clone().cpu(),
                                                output_val_server.detach().clone().cpu(), average='micro',
                                                zero_division=0)
@@ -771,7 +577,8 @@ def val_stage(s, content):
             f1_epoch += f1_score(label_val.detach().clone().cpu(), output_val_server.detach().clone().cpu(),
                                  average='micro', zero_division=0)
 
-    wandb.log({"Loss_val": val_loss_total / total_val_nr,
+    if weights_and_biases:
+        wandb.log({"Loss_val": val_loss_total / total_val_nr,
                "Accuracy_val_micro": accuracy_custom / total_val_nr,
                "F1_val": f1_epoch / total_val_nr,
                "AUC_val": auc_val / total_val_nr,
@@ -785,7 +592,7 @@ def val_stage(s, content):
     print("status_epoch_val: ", status_epoch_val)
 
     msg = 0
-    send_msg(s, 3, msg)
+    Communication.send_msg(s, 3, msg)
 
 
 def test_stage(s, epoch):
@@ -809,14 +616,8 @@ def test_stage(s, epoch):
             msg = {'client_output_val/test': client_output_test,
                    'label_val/test': label_test,
                    }
-            if detailed_output:
-                print("The msg is:", msg)
-            send_msg(s, 1, msg)
-            if detailed_output:
-                print("294: send_msg success!")
-            msg = recieve_msg(s)
-            if detailed_output:
-                print("296: recieve_msg success!")
+            Communication.send_msg(s, 1, msg)
+            msg = Communication.recieve_msg(s)
             correct_test_add = msg["correct_val/test"]
             test_loss = msg["val/test_loss"]
             output_test_server = msg["output_val/test_server"]
@@ -830,7 +631,7 @@ def test_stage(s, epoch):
             hamming_epoch += accuracy_score(label_test.detach().clone().cpu(),
                                             output_test_server.detach().clone().cpu())
             precision_epoch += precision_score(label_test.detach().clone().cpu(),
-                                               output_test_server.detach().clone().cpu(), average='micro')
+                                               output_test_server.detach().clone().cpu(), average='micro', zero_division=0)
             recall_epoch += recall_score(label_test.detach().clone().cpu(), output_test_server.detach().clone().cpu(),
                                          average='micro')
             f1_epoch += f1_score(label_test.detach().clone().cpu(), output_test_server.detach().clone().cpu(), average='micro')
@@ -875,13 +676,14 @@ def test_stage(s, epoch):
     print("Average data transfer/epoch: ", data_transfer_per_epoch / epoch / 1000000, " MB")
     print("Average dismissal rate: ", average_dismissal_rate / epoch)
 
-    wandb.config.update({"Average data transfer/epoch (MB): ": data_transfer_per_epoch / epoch / 1000000,
+    if weights_and_biases:
+        wandb.config.update({"Average data transfer/epoch (MB): ": data_transfer_per_epoch / epoch / 1000000,
                          "Average dismissal rate: ": average_dismissal_rate / epoch,
                          "total_MegaFLOPS_forward": total_flops_forward/1000000, "total_MegaFLOPS_encoder": total_flops_encoder/1000000,
                          "total_MegaFLOPS_backprob": total_flops_backprob/1000000,"total_MegaFLOPS modal": total_flops_model/1000000 ,"total_MegaFLOPS": total_flops_all/1000000})
 
     msg = 0
-    send_msg(s, 3, msg)
+    Communication.send_msg(s, 3, msg)
 
 
 def initialize_model(s, msg):
@@ -890,17 +692,12 @@ def initialize_model(s, msg):
     the initial weights are fetched from the server
     :param conn:
     """
-    #msg = recieve_msg(s)
     if msg == 0:
-        #print("msg == 0")
         pass
     else:
         print("msg != 0")
         client.load_state_dict(msg, strict=False)
         print("model successfully initialized")
-    #print("start_training")
-    # start_training(s)
-    #train_epoch(s)
 
 
 def main():
@@ -917,9 +714,9 @@ def main():
 
     global X_train, X_val, y_val, y_train, y_test, X_test
     sampling_frequency = 100
-    datafolder = ptb_path
+    datafolder = 'C:/Users/maria/PycharmProjects/Medical-MESL-Debug/Medical-Dataset/Normal/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/'
     task = 'superdiagnostic'
-    outputfolder = mlb_path
+    outputfolder = 'C:/Users/maria/PycharmProjects/Medical-MESL-Debug/Medical-Dataset/Normal/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/output/'
 
     # Load PTB-XL data
     data, raw_labels = utils.load_dataset(datafolder, sampling_frequency)
@@ -932,22 +729,20 @@ def main():
 
     # 1-9 for training
     X_train = data[labels.strat_fold < 10]
+    global y_train
     y_train = Y[labels.strat_fold < 10]
     # 10 for validation
     X_val = data[labels.strat_fold == 10]
     y_val = Y[labels.strat_fold == 10]
 
-    #X_test = data[labels.strat_fold == 10]
-    #y_test = Y[labels.strat_fold == 10]
-
     num_classes = 5  # <=== number of classes in the finetuning dataset
     input_shape = [1000, 12]  # <=== shape of samples, [None, 12] in case of different lengths
 
-    print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)#, X_test.shape, y_test.shape)
+    print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)
 
     import pickle
 
-    standard_scaler = pickle.load(open("PTB-XL/ptb-xl/standard_scaler.pkl", "rb"))
+    standard_scaler = pickle.load(open('C:/Users/maria/PycharmProjects/PTB-XL/standard_scaler.pkl', "rb"))
 
     X_train = utils.apply_standardizer(X_train, standard_scaler)
     X_val = utils.apply_standardizer(X_val, standard_scaler)
@@ -955,11 +750,6 @@ def main():
 
 
     init()
-
-    if plots: #visualize data
-        Plots.load_dataset()
-        Plots.plotten()
-        Plots.ecg_signals()
 
     global epoch
     epoch = 0
@@ -987,7 +777,7 @@ def main():
     torch.backends.cudnn.deterministic = True
 
     global client
-    client = Client()
+    client = Models.Client()
     print("Start Client")
     client.double().to(device)
 
@@ -1011,7 +801,7 @@ def main():
 
     if autoencoder:
         global encode
-        encode = Encode()
+        encode = Models.Encode()
         print("Start Encoder")
         if autoencoder_train == 0:
             encode.load_state_dict(torch.load("./convencoder_medical.pth"))  # CPU
@@ -1025,7 +815,7 @@ def main():
 
     if grad_encode:
         global grad_decoder
-        grad_decoder = Grad_Decoder()
+        grad_decoder = Models.Grad_Decoder()
         #grad_decoder.load_state_dict(torch.load("./grad_decoder_medical.pth"))
         grad_decoder.double().to(device)
         print("Grad decoder model loaded")

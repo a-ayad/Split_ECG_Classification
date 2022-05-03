@@ -1,0 +1,9 @@
+2022-04-04 17:59:00,743 INFO    MainThread:15724 [wandb_setup.py:_flush():69] setting env: {}
+2022-04-04 17:59:00,743 INFO    MainThread:15724 [wandb_setup.py:_flush():69] setting login settings: {}
+2022-04-04 17:59:00,743 INFO    MainThread:15724 [wandb_init.py:_log_setup():342] Logging user logs to E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175900-326xu371\logs\debug.log
+2022-04-04 17:59:00,743 INFO    MainThread:15724 [wandb_init.py:_log_setup():343] Logging internal logs to E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_175900-326xu371\logs\debug-internal.log
+2022-04-04 17:59:00,744 INFO    MainThread:15724 [wandb_init.py:init():375] calling init triggers
+2022-04-04 17:59:00,744 INFO    MainThread:15724 [wandb_init.py:init():380] wandb.init called with sweep_config: {}
+config: {'learning_rate': 0.0005, 'batch_size': 64, 'autoencoder': 0}
+2022-04-04 17:59:00,745 INFO    MainThread:15724 [wandb_init.py:init():421] wandb.init() called when a run is still active
+2022-04-04 17:59:00,747 INFO    MainThread:15724 [wandb_run.py:_config_callback():843] config_cb None None {'learning_rate': 0.0005, 'PC: ': 2}

@@ -1,32 +1,44 @@
-# Advanced server side configurations
+import torch.nn as nn
+import torch
 
-## Host configureation
-By default, Host IP and Port are read from the parameter_client.json file. The paramter can also be set directly in the server.py file. Server IP should alwas be "0.0.0.0" (local host)
+class Decode(nn.Module):
+    """
+    Decoder model
+    """
+    def __init__(self):
+        super(Decode, self).__init__()
+        self.t_convb = nn.ConvTranspose1d(24, 48, 2, stride=2, padding=0)
+        self.t_convc = nn.ConvTranspose1d(48, 96, 2, stride=2, padding=0)
+        self.t_convd = nn.ConvTranspose1d(96, 144, 2, stride=2, padding=0)
+        self.t_conve = nn.ConvTranspose1d(144, 192, 2, stride=2, padding=1)
 
-```python
-host = data["host"]
-port = data["port"]
-```
+    def forward(self, x):
+        x = self.t_convb(x)
+        x = self.t_convc(x)
+        x = self.t_convd(x)
+        x = self.t_conve(x)
+        return x
 
-## Training parameter configuration
-By default, Training and tcp paramters (learningrate, update threshold, update_mechanism, mechanism) are read from the parameter_server.json file.
 
-Further, device, optimizer and lossfunction can be set int the main method of the server.py file.
+class Grad_Encoder(nn.Module):
+    """
+    Encoder model
+    """
+    def __init__(self):
+        super(Grad_Encoder, self).__init__()
+        self.conva = nn.Conv1d(192, 144, 2, stride=2,  padding=1)
+        self.convb = nn.Conv1d(144, 96, 2, stride=2, padding=0)
+        self.convc = nn.Conv1d(96, 48, 2, stride=2,  padding=0)
+        self.convd = nn.Conv1d(48, 24, 2, stride=2, padding=0)##
 
-```python
-global device
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    def forward(self, x):
+        x = self.conva(x)
+        x = self.convb(x)
+        x = self.convc(x)
+        x = self.convd(x)
+        return x
 
-global optimizer
-optimizer = AdamW(server.parameters(), lr=lr)
 
-global error
-error = nn.BCELoss()
-```
-## Model
-The model of the client can also be modified in the server.py file in the Server Class. 
-Attention: the input shape has to match the dataset and the outputshape the decoder/client side model!
-```python
 class Server(nn.Module):
     """
     Server model
@@ -77,7 +89,3 @@ class Server(nn.Module):
         x = self.flatt(x)
         x = torch.sigmoid(self.linear2(x))
         return x
-```
-## Costumize Autoencoder
-Customizing the autoencoder is explaines in the advanced_settings file.
-

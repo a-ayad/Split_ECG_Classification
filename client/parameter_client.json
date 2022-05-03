@@ -1,14 +1,20 @@
 {
-    "training_epochs": 3,
-    "batchsize": 64,
-    "learningrate": 0.0002,
-    "batch_concat": 1,
-
-    "host": "192.168.178.26",
+    "host": "169.254.123.131",
     "port": 10087,
     "max_recv": 4096,
-    "autoencoder": 0,
-    "detailed_output": 0,
+
+    "batchsize": 64,
+    "learningrate": 0.0005,
+
     "count_flops": 0,
-    "plots": 0
+
+    "autoencoder": 0,
+
+    "autoencoder_train": 0,
+    "grad_encode": 0,
+    "train_gradAE_active": 0,
+
+    "deactivate_train_after_num_epochs": 20,
+    "deactivate_grad_train_after_num_epochs": 20
 }
+

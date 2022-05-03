@@ -72,7 +72,6 @@ Furthermore at the client, the computed FLOPs can be measured.
 To reproduce the different experiments, here the autoencoder can be activated or deactivated (settings: (1 or 0)).
 
 
-
 ### Set serverside configurations
 
 To set the server side configuraitons, the file parameter_server.json can be edited.  
@@ -101,6 +100,7 @@ Also the Port has to be set.
 The max_recv property is the bit rate of the tcp port.
 
 One can set the server side learningrate manually (in all the configurations of the corresponding paper, the same learning rate for server and client was chosen).
+
 
 Also, the update_mechanism can be configured (static or adaptive):
 In the static setting: 
