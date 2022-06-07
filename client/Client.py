@@ -18,6 +18,7 @@ import wandb
 import Models
 import Communication
 import Flops
+import pickle
 # Set path variables to load the PTB-XL dataset and its scaler
 cwd = os.path.dirname(os.path.abspath(__file__))
 mlb_path = os.path.join(cwd,  "PTB-XL", "ptb-xl", "output", "mlb.pkl")
@@ -117,8 +118,7 @@ def init():
     """
     train_dataset = PTB_XL('train')
     val_dataset = PTB_XL('val')
-    global train_loader
-    global val_loader
+    global train_loader, val_loader
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batchsize, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batchsize, shuffle=True)
 
@@ -159,16 +159,12 @@ def serverHandler(conn):
         recieve_request(conn)
 
 
-def grad_postprocessing(grad):
-    grad_new = grad.numpy()
-    for a in range(64):
-        #scaler.fit(grad[a])
-        grad_new[a] = scaler.inverse_transform(grad[a])
-    grad_new = torch.DoubleTensor(grad_new).to(device)
-    return grad_new
-
-
 def train_epoch(s, content):
+    """
+    Training cycle for one epoch, started by the server
+    :param s: socket
+    :param content:
+    """
     #new_split() #new random dist between train and val
     loss_grad_total = 0
     global epoch
@@ -368,8 +364,12 @@ def epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc
     batches_abort_rate_total.append(batches_aborted / total_train_nr)
 
 
-
 def val_stage(s, content):
+    """
+    Validation cycle for one epoch, started by the server
+    :param s: socket
+    :param content:
+    """
     total_val_nr, val_loss_total = 0, 0
     precision_epoch, recall_epoch, f1_epoch, auc_val, accuracy_sklearn,  accuracy_custom = 0, 0, 0, 0, 0, 0
     with torch.no_grad():
@@ -428,6 +428,11 @@ def val_stage(s, content):
 
 
 def test_stage(s, epoch):
+    """
+    Test cycle for one epoch, started by the server
+    :param s: socket
+    :param epoch: currrent epoch
+    """
     loss_test = 0.0
     correct_test, total_test = 0, 0
     hamming_epoch = 0
@@ -476,7 +481,7 @@ def test_stage(s, epoch):
 
     global data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total
     data_transfer_per_epoch, average_dismissal_rate, total_flops_forward, total_flops_encoder, total_flops_backprob, total_flops_send, total_flops_recieve,total_flops_rest = 0,0,0,0,0,0,0,0
-    for data in data_send_per_epoch_total:
+    for data in data_send_per_epoch_total: 
         data_transfer_per_epoch += data
     for data in data_recieved_per_epoch_total:
         data_transfer_per_epoch += data
@@ -510,8 +515,19 @@ def test_stage(s, epoch):
                          "total_MegaFLOPS_forward": total_flops_forward/1000000, "total_MegaFLOPS_encoder": total_flops_encoder/1000000,
                          "total_MegaFLOPS_backprob": total_flops_backprob/1000000,"total_MegaFLOPS modal": total_flops_model/1000000 ,"total_MegaFLOPS": total_flops_all/1000000})
 
-    msg = 0
-    Communication.send_msg(s, 3, msg)
+    Communication.send_msg(s, 3, 0)
+
+
+def grad_postprocessing(grad):
+    """
+    Scalar used to transform the gradients back to their original size after decoding
+    :param grad: encoded gradient
+    """
+    grad_new = grad.numpy()
+    for a in range(batchsize):
+        grad_new[a] = scaler.inverse_transform(grad[a])
+    grad_new = torch.DoubleTensor(grad_new).to(device)
+    return grad_new
 
 
 def initialize_model(s, msg):
@@ -530,9 +546,11 @@ def initialize_model(s, msg):
 
 def main():
     """
-    initialize device, client model, optimizer, loss and decoder and starts the training process
+    initialize dataset, device, client model, optimizer, loss and decoder and starts the training process
     """
-    print_json()
+    print_json() #Print parameters
+
+    # Initialize Dataset
     global flops_counter
     flops_counter = Flops.Flops(count_flops)
 
@@ -567,8 +585,6 @@ def main():
 
     print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)
 
-    import pickle
-
     standard_scaler = pickle.load(open('C:/Users/maria/PycharmProjects/PTB-XL/standard_scaler.pkl', "rb"))
 
     X_train = utils.apply_standardizer(X_train, standard_scaler)
@@ -576,25 +592,21 @@ def main():
     #X_test = utils.apply_standardizer(X_test, standard_scaler)
 
 
-    init()
+    init() #Initialisation of the training and validation dataset
 
-    global epoch
-    epoch = 0
-    global encoder_grad_server
-    encoder_grad_server = 0
+    global data_send_per_epoch, data_recieved_per_epoch, encoder_grad_server, epoch
+    data_send_per_epoch, data_recieved_per_epoch, encoder_grad_server, epoch = 0, 0, 0, 0
 
-    global data_send_per_epoch_total
-    data_send_per_epoch_total = []
-    global data_recieved_per_epoch_total
-    data_recieved_per_epoch_total = []
-    global batches_abort_rate_total
-    batches_abort_rate_total = []
+    global data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total
+    data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total = [], [], []
 
+    #Define training on GPU
     global device
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     if (torch.cuda.is_available()):
         print("training on gpu")
     print("training on,", device)
+    #Set seed to replicate results
     seed = 0
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -603,28 +615,19 @@ def main():
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
+    #Initialize client, optimizer, error-function, potentially encoder and grad_encoder
     global client
     client = Models.Client()
     print("Start Client")
     client.double().to(device)
 
     global optimizer
-    #optimizer = SGD(client.parameters(), lr=lr, momentum=0.9)
     optimizer = AdamW(client.parameters(), lr=lr)
     print("Start Optimizer")
 
     global error
-    #error = nn.CrossEntropyLoss()
     error = nn.BCELoss()
     print("Start loss calcu")
-
-    global data_send_per_epoch
-    global data_recieved_per_epoch
-    data_send_per_epoch = 0
-    data_recieved_per_epoch = 0
-
-    #global scaler
-    #scaler = MinMaxScaler()
 
     if autoencoder:
         global encode
@@ -650,14 +653,14 @@ def main():
         global optimizer_grad_decoder
         optimizer_grad_decoder = Adam(grad_decoder.parameters(), lr=0.0001)
 
-    global error_grad_autoencoder
-    error_grad_autoencoder = nn.MSELoss()
+        global error_grad_autoencoder
+        error_grad_autoencoder = nn.MSELoss()
 
+    #Connect to the server
     s = socket.socket()
     print("Start socket connect")
     s.connect((host, port))
     print("Socket connect success, to.", host, port)
-    #initialize_model(s)
     serverHandler(s)
 
 
