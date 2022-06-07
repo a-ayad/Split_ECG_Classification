@@ -1,0 +1,118 @@
+2022-04-04 17:17:30,451 INFO    MainThread:17516 [wandb_setup.py:_flush():69] setting env: {}
+2022-04-04 17:17:30,451 INFO    MainThread:17516 [wandb_setup.py:_flush():69] setting login settings: {}
+2022-04-04 17:17:30,452 INFO    MainThread:17516 [wandb_init.py:_log_setup():342] Logging user logs to E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\logs\debug.log
+2022-04-04 17:17:30,452 INFO    MainThread:17516 [wandb_init.py:_log_setup():343] Logging internal logs to E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171730-1ozvtwxq\logs\debug-internal.log
+2022-04-04 17:17:30,452 INFO    MainThread:17516 [wandb_init.py:init():375] calling init triggers
+2022-04-04 17:17:30,452 INFO    MainThread:17516 [wandb_init.py:init():380] wandb.init called with sweep_config: {}
+config: {}
+2022-04-04 17:17:30,453 INFO    MainThread:17516 [wandb_init.py:init():424] starting backend
+2022-04-04 17:17:30,453 INFO    MainThread:17516 [backend.py:_multiprocessing_setup():70] multiprocessing start_methods=spawn, using: spawn
+2022-04-04 17:17:30,457 INFO    MainThread:17516 [backend.py:ensure_launched():135] starting backend process...
+2022-04-04 17:17:30,524 INFO    MainThread:17516 [backend.py:ensure_launched():139] started backend process with pid: 11112
+2022-04-04 17:17:30,525 INFO    MainThread:17516 [wandb_init.py:init():429] backend started and connected
+2022-04-04 17:17:30,527 INFO    MainThread:17516 [wandb_init.py:init():477] updated telemetry
+2022-04-04 17:17:30,527 INFO    MainThread:17516 [wandb_init.py:init():500] communicating current version
+2022-04-04 17:17:31,555 INFO    MainThread:17516 [wandb_init.py:init():505] got version response upgrade_message: "wandb version 0.12.11 is available!  To upgrade, please run:\n $ pip install wandb --upgrade"
+
+2022-04-04 17:17:31,556 INFO    MainThread:17516 [wandb_init.py:init():513] communicating run to backend with 30 second timeout
+2022-04-04 17:17:31,908 INFO    MainThread:17516 [wandb_init.py:init():540] starting run threads in backend
+2022-04-04 17:17:32,070 INFO    MainThread:17516 [wandb_run.py:_console_start():1601] atexit reg
+2022-04-04 17:17:32,071 INFO    MainThread:17516 [wandb_run.py:_redirect():1475] redirect: SettingsConsole.WRAP
+2022-04-04 17:17:32,071 INFO    MainThread:17516 [wandb_run.py:_redirect():1512] Wrapping output streams.
+2022-04-04 17:17:32,073 INFO    MainThread:17516 [wandb_run.py:_redirect():1536] Redirects installed.
+2022-04-04 17:17:32,073 INFO    MainThread:17516 [wandb_init.py:init():565] run started, returning control to user process
+2022-04-04 17:17:32,082 INFO    MainThread:17516 [wandb_setup.py:_flush():69] setting env: {}
+2022-04-04 17:17:32,082 INFO    MainThread:17516 [wandb_setup.py:_flush():69] setting login settings: {}
+2022-04-04 17:17:32,082 INFO    MainThread:17516 [wandb_init.py:_log_setup():342] Logging user logs to E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171732-1iegwtsg\logs\debug.log
+2022-04-04 17:17:32,082 INFO    MainThread:17516 [wandb_init.py:_log_setup():343] Logging internal logs to E:\VisualStudioCode\Split_ECG_Classification\wandb\run-20220404_171732-1iegwtsg\logs\debug-internal.log
+2022-04-04 17:17:32,083 INFO    MainThread:17516 [wandb_init.py:init():375] calling init triggers
+2022-04-04 17:17:32,083 INFO    MainThread:17516 [wandb_init.py:init():380] wandb.init called with sweep_config: {}
+config: {'learning_rate': 0.0005, 'batch_size': 64, 'autoencoder': 0}
+2022-04-04 17:17:32,084 INFO    MainThread:17516 [wandb_init.py:init():421] wandb.init() called when a run is still active
+2022-04-04 17:17:32,085 INFO    MainThread:17516 [wandb_run.py:_config_callback():843] config_cb None None {'learning_rate': 0.0005, 'PC: ': 2}
+2022-04-04 17:18:03,002 INFO    MainThread:17516 [wandb_run.py:_atexit_cleanup():1571] got exitcode: 1
+2022-04-04 17:18:03,003 INFO    MainThread:17516 [wandb_run.py:_restore():1543] restore
+2022-04-04 17:18:03,187 INFO    MainThread:17516 [wandb_run.py:_wait_for_finish():1693] got exit ret: file_counts {
+  wandb_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 837
+  total_bytes: 837
+}
+
+2022-04-04 17:18:03,417 INFO    MainThread:17516 [wandb_run.py:_wait_for_finish():1693] got exit ret: file_counts {
+  wandb_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 837
+  total_bytes: 837
+}
+
+2022-04-04 17:18:04,197 INFO    MainThread:17516 [wandb_run.py:_wait_for_finish():1693] got exit ret: file_counts {
+  wandb_count: 5
+}
+pusher_stats {
+  uploaded_bytes: 837
+  total_bytes: 4428
+}
+
+2022-04-04 17:18:04,311 INFO    MainThread:17516 [wandb_run.py:_wait_for_finish():1693] got exit ret: file_counts {
+  wandb_count: 5
+}
+pusher_stats {
+  uploaded_bytes: 837
+  total_bytes: 4428
+}
+
+2022-04-04 17:18:04,419 INFO    MainThread:17516 [wandb_run.py:_wait_for_finish():1693] got exit ret: file_counts {
+  wandb_count: 5
+}
+pusher_stats {
+  uploaded_bytes: 2639
+  total_bytes: 4428
+}
+
+2022-04-04 17:18:04,526 INFO    MainThread:17516 [wandb_run.py:_wait_for_finish():1693] got exit ret: file_counts {
+  wandb_count: 5
+}
+pusher_stats {
+  uploaded_bytes: 4428
+  total_bytes: 4428
+}
+
+2022-04-04 17:18:04,808 INFO    MainThread:17516 [wandb_run.py:_wait_for_finish():1693] got exit ret: file_counts {
+  wandb_count: 5
+}
+pusher_stats {
+  uploaded_bytes: 4428
+  total_bytes: 4428
+}
+
+2022-04-04 17:18:04,919 INFO    MainThread:17516 [wandb_run.py:_wait_for_finish():1693] got exit ret: file_counts {
+  wandb_count: 5
+}
+pusher_stats {
+  uploaded_bytes: 4428
+  total_bytes: 4428
+}
+
+2022-04-04 17:18:05,287 INFO    MainThread:17516 [wandb_run.py:_wait_for_finish():1693] got exit ret: file_counts {
+  wandb_count: 5
+}
+pusher_stats {
+  uploaded_bytes: 4428
+  total_bytes: 4428
+}
+
+2022-04-04 17:18:05,404 INFO    MainThread:17516 [wandb_run.py:_wait_for_finish():1693] got exit ret: done: true
+exit_result {
+}
+file_counts {
+  wandb_count: 5
+}
+pusher_stats {
+  uploaded_bytes: 4428
+  total_bytes: 4428
+}
+
+2022-04-04 17:18:06,496 INFO    MainThread:17516 [wandb_run.py:_show_files():1915] logging synced files

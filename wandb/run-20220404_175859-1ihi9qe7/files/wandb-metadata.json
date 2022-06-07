@@ -1,0 +1,24 @@
+{
+    "os": "Windows-10-10.0.19043-SP0",
+    "python": "3.9.7",
+    "heartbeatAt": "2022-04-04T15:59:00.599633",
+    "startedAt": "2022-04-04T15:58:59.010379",
+    "docker": null,
+    "gpu": "NVIDIA GeForce RTX 2060",
+    "gpu_count": 1,
+    "cpu_count": 12,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "e:\\VisualStudioCode\\Split_ECG_Classification\\client\\Client.py",
+    "codePath": "client\\Client.py",
+    "git": {
+        "remote": "https://github.com/a-ayad/Split_ECG_Classification.git",
+        "commit": "7c6cec7a5d4ea0a560b4dc766423bd6c2954db5c"
+    },
+    "email": "marian.frei@gmx.de",
+    "root": "E:/VisualStudioCode/Split_ECG_Classification",
+    "host": "DESKTOP-9D75C8D",
+    "username": "maria",
+    "executable": "G:\\Anaconda\\envs\\Medical-MESL\\python.exe"
+}

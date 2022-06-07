@@ -1,0 +1,28 @@
+learningrate:  0.0005
+grad_encode:  0
+gradAE_train:  0
+deactivate_grad_train_after_num_epochs:  20
+Getting the metadata host:  169.254.123.80
+Getting the metadata port:  10087
+Getting the metadata batchsize:  64
+Autoencoder:  0
+count_flops:  0
+autoencoder_train:  0
+deactivate_train_after_num_epochs:  20
+G:\Anaconda\envs\Medical-MESL\lib\site-packages\sklearn\base.py:324: UserWarning: Trying to unpickle estimator StandardScaler from version 0.23.2 when using version 1.0.1. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/modules/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+(1000, 12)
+(19267, 1000, 12) (19267, 5) (2163, 1000, 12) (2163, 5)
+training on gpu
+training on, cuda:0
+Start Client
+Start Optimizer
+Start loss calcu
+Start socket connect
+Traceback (most recent call last):
+  File "e:\VisualStudioCode\Split_ECG_Classification\client\Client.py", line 990, in <module>
+    main()
+  File "e:\VisualStudioCode\Split_ECG_Classification\client\Client.py", line 982, in main
+    s.connect((host, port))
+TimeoutError: [WinError 10060] Ein Verbindungsversuch ist fehlgeschlagen, da die Gegenstelle nach einer bestimmten Zeitspanne nicht richtig reagiert hat, oder die hergestellte Verbindung war fehlerhaft, da der verbundene Host nicht reagiert hat
