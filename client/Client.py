@@ -44,11 +44,11 @@ deactivate_train_after_num_epochs = data["deactivate_train_after_num_epochs"]
 grad_encode = data["grad_encode"]
 train_gradAE_active = data["train_gradAE_active"]
 deactivate_grad_train_after_num_epochs = data["deactivate_grad_train_after_num_epochs"]
-weights_and_biases = 0
+weights_and_biases = 1
 
 # Synchronisation with Weights&Biases
 if weights_and_biases:
-    wandb.init(project="Basis", entity="split-learning-medical")
+    wandb.init(project="TCN", entity="mfrei")
     wandb.init(config={
         "learning_rate": lr,
         "batch_size": batchsize,
@@ -344,12 +344,13 @@ def epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc
         recall_epoch / total_train_nr,
         f1_epoch / total_train_nr, epoch_endtime, batches_aborted / total_train_nr, train_loss / total_train_nr)
     print("status_epoch_train: ", status_epoch_train)
-    print("MegaFLOPS_forward_epoch", flops_counter.flops_forward_epoch/1000000)
-    print("MegaFLOPS_encoder_epoch", flops_counter.flops_encoder_epoch/1000000)
-    print("MegaFLOPS_backprop_epoch", flops_counter.flops_backprop_epoch/1000000)
-    print("MegaFLOPS_rest", flops_counter.flops_rest/1000000)
-    print("MegaFLOPS_send", flops_counter.flops_send/1000000)
-    print("MegaFLOPS_recieve", flops_counter.flops_recieve/1000000)
+    if count_flops:
+        print("MegaFLOPS_forward_epoch", flops_counter.flops_forward_epoch/1000000)
+        print("MegaFLOPS_encoder_epoch", flops_counter.flops_encoder_epoch/1000000)
+        print("MegaFLOPS_backprop_epoch", flops_counter.flops_backprop_epoch/1000000)
+        print("MegaFLOPS_rest", flops_counter.flops_rest/1000000)
+        print("MegaFLOPS_send", flops_counter.flops_send/1000000)
+        print("MegaFLOPS_recieve", flops_counter.flops_recieve/1000000)
 
     if weights_and_biases:
         wandb.log({"Batches Abortrate": batches_aborted / total_train_nr, "MegaFLOPS Client Encoder": flops_counter.flops_encoder_epoch/1000000,
@@ -503,11 +504,12 @@ def test_stage(s, epoch):
         total_flops_rest += flop
     total_flops_model = total_flops_backprob + total_flops_encoder + total_flops_forward
     total_flops_all = total_flops_model+total_flops_send+total_flops_recieve+total_flops_rest
-    print("total FLOPs forward: ", total_flops_forward)
-    print("total FLOPs encoder: ", total_flops_encoder)
-    print("total FLOPs backprob: ", total_flops_backprob)
-    print("total FLOPs Model: ", total_flops_model)
-    print("total FLOPs: ", total_flops_all)
+    if count_flops:
+        print("total FLOPs forward: ", total_flops_forward)
+        print("total FLOPs encoder: ", total_flops_encoder)
+        print("total FLOPs backprob: ", total_flops_backprob)
+        print("total FLOPs Model: ", total_flops_model)
+        print("total FLOPs: ", total_flops_all)
     print("Average data transfer/epoch: ", data_transfer_per_epoch / epoch / 1000000, " MB")
     print("Average dismissal rate: ", average_dismissal_rate / epoch)
 
@@ -620,6 +622,7 @@ def main():
     #Initialize client, optimizer, error-function, potentially encoder and grad_encoder
     global client
     client = Models.Client()
+    #client = Models.Small_TCN_5(5, 12)
     print("Start Client")
     client.double().to(device)
 
@@ -629,6 +632,7 @@ def main():
 
     global error
     error = nn.BCELoss()
+    #error = nn.BCEWithLogitsLoss()
     print("Start loss calcu")
 
     if autoencoder:

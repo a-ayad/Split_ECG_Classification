@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+import nemo
 
 class Decode(nn.Module):
     """
@@ -89,3 +90,117 @@ class Server(nn.Module):
         x = self.flatt(x)
         x = torch.sigmoid(self.linear2(x))
         return x
+
+
+class Small_TCN_5(nn.Module):
+    def __init__(self, classes, n_inputs ):
+        super(Small_TCN_5, self).__init__()
+        # Hyperparameters for TCN
+        Kt = 19
+        pt = 0.3
+        Ft = 11
+
+        # Third block
+        dilation = 4
+        self.pad5 = nn.ConstantPad1d(padding=((Kt - 1) * dilation, 0), value=0)
+        self.conv5 = nn.Conv1d(in_channels=Ft, out_channels=Ft, kernel_size=Kt, dilation=dilation, bias=False)
+        self.batchnorm5 = nn.BatchNorm1d(num_features=Ft)
+        self.act5 = nn.ReLU()
+        self.dropout5 = nn.Dropout(p=pt)
+        self.pad6 = nn.ConstantPad1d(padding=((Kt - 1) * dilation, 0), value=0)
+        self.conv6 = nn.Conv1d(in_channels=Ft, out_channels=Ft, kernel_size=Kt, dilation=dilation, bias=False)
+        self.batchnorm6 = nn.BatchNorm1d(num_features=Ft)
+        self.act6 = nn.ReLU()
+        self.dropout6 = nn.Dropout(p=pt)
+        self.add3 = nemo.quant.pact.PACT_IntegerAdd()
+        self.reluadd3 = nn.ReLU()
+
+        # fourth block
+        dilation = 8
+        self.pad7 = nn.ConstantPad1d(padding=((Kt - 1) * dilation, 0), value=0)
+        self.conv7 = nn.Conv1d(in_channels=Ft, out_channels=Ft, kernel_size=Kt, dilation=dilation, bias=False)
+        self.batchnorm7 = nn.BatchNorm1d(num_features=Ft)
+        self.act7 = nn.ReLU()
+        self.dropout7 = nn.Dropout(p=pt)
+        self.pad8 = nn.ConstantPad1d(padding=((Kt - 1) * dilation, 0), value=0)
+        self.conv8 = nn.Conv1d(in_channels=Ft, out_channels=Ft, kernel_size=Kt, dilation=dilation, bias=False)
+        self.batchnorm8 = nn.BatchNorm1d(num_features=Ft)
+        self.act8 = nn.ReLU()
+        self.dropout8 = nn.Dropout(p=pt)
+        self.add4 = nemo.quant.pact.PACT_IntegerAdd()
+        self.reluadd4 = nn.ReLU()
+
+        # fifth block
+        dilation = 16
+        self.pad9 = nn.ConstantPad1d(padding=((Kt - 1) * dilation, 0), value=0)
+        self.conv9 = nn.Conv1d(in_channels=Ft, out_channels=Ft, kernel_size=Kt, dilation=dilation, bias=False)
+        self.batchnorm9 = nn.BatchNorm1d(num_features=Ft)
+        self.act9 = nn.ReLU()
+        self.dropout9 = nn.Dropout(p=pt)
+        self.pad10 = nn.ConstantPad1d(padding=((Kt - 1) * dilation, 0), value=0)
+        self.conv10 = nn.Conv1d(in_channels=Ft, out_channels=Ft, kernel_size=Kt, dilation=dilation, bias=False)
+        self.batchnorm10 = nn.BatchNorm1d(num_features=Ft)
+        self.act10 = nn.ReLU()
+        self.dropout10 = nn.Dropout(p=pt)
+        self.add5 = nemo.quant.pact.PACT_IntegerAdd()
+        self.reluadd5 = nn.ReLU()
+
+        # Last layer
+        self.linear = nn.Linear(in_features=11000, out_features=classes, bias=False) #Ft * 250
+
+    def forward(self, x, drop=True):
+        # Now we propagate through the network correctly
+
+        # Third block
+        res = self.pad5(x)
+        # res = self.pad5(res)
+        res = self.conv5(res)
+        res = self.batchnorm5(res)
+        res = self.act5(res)
+        res = self.dropout5(res)
+        res = self.pad6(res)
+        res = self.conv6(res)
+        res = self.batchnorm6(res)
+        res = self.act6(res)
+        res = self.dropout6(res)
+        x = self.add3(x, res)
+        x = self.reluadd3(x)
+
+        # Fourth block
+        res = self.pad7(x)
+        # res = self.pad5(res)
+        res = self.conv7(res)
+        res = self.batchnorm7(res)
+        res = self.act7(res)
+        res = self.dropout7(res)
+        res = self.pad8(res)
+        res = self.conv8(res)
+        res = self.batchnorm8(res)
+        res = self.act8(res)
+        res = self.dropout8(res)
+        x = self.add4(x, res)
+        x = self.reluadd4(x)
+
+        """
+        # Fifth block
+        res = self.pad9(x)
+        # res = self.pad5(res)
+        res = self.conv9(res)
+        res = self.batchnorm9(res)
+        res = self.act9(res)
+        res = self.dropout9(res)
+        res = self.pad10(res)
+        res = self.conv10(res)
+        res = self.batchnorm10(res)
+        res = self.act10(res)
+        res = self.dropout10(res)
+        x = self.add5(x, res)
+        x = self.reluadd5(x)
+        """
+
+        # Linear layer to classify
+        x = x.flatten(1)
+        o = self.linear(x)
+        o = torch.sigmoid(o)
+        return o  # Return directly without softmax
+

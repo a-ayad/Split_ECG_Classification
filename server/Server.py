@@ -423,6 +423,7 @@ def main():
 
     global server
     server = ModelsServer.Server()
+    #server = ModelsServer.Small_TCN_5(5, 12)
     server.double().to(device)
 
     """
@@ -440,7 +441,8 @@ def main():
     global error
     #error = nn.CrossEntropyLoss()
     error = nn.BCELoss()
-    print("Calculate CrossEntropyLoss complete.")
+    #error = nn.BCEWithLogitsLoss()
+    #print("Calculate CrossEntropyLoss complete.")
 
 
     global error_autoencoder

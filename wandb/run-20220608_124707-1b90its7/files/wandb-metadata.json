@@ -1,0 +1,24 @@
+{
+    "os": "Linux-5.4.0-42-generic-x86_64-with-glibc2.31",
+    "python": "3.9.7",
+    "heartbeatAt": "2022-06-08T10:47:07.931057",
+    "startedAt": "2022-06-08T10:47:07.111665",
+    "docker": null,
+    "gpu": "NVIDIA GeForce RTX 2080 SUPER",
+    "gpu_count": 1,
+    "cpu_count": 20,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "/home/marian/VisualStudioCode/Split_ECG_Classification/client/Client.py",
+    "codePath": "client/Client.py",
+    "git": {
+        "remote": "https://github.com/MarianFr/Split_ECG_Classification.git",
+        "commit": "c39def8b177d198c0a77f7a9d22cb417b591d159"
+    },
+    "email": "marian.frei@gmx.de",
+    "root": "/home/marian/VisualStudioCode/Split_ECG_Classification",
+    "host": "indaTower",
+    "username": "marian",
+    "executable": "/home/marian/anaconda3/envs/Medical-MESL/bin/python"
+}
