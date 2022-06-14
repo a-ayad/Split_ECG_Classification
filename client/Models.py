@@ -67,7 +67,7 @@ class Grad_Decoder(nn.Module):
 
 
 class Small_TCN_5(nn.Module):
-    def __init__(self, classes, n_inputs ):
+    def __init__(self, classes, n_inputs):
         super(Small_TCN_5, self).__init__()
         # Hyperparameters for TCN
         Kt = 19
@@ -125,12 +125,12 @@ class Small_TCN_5(nn.Module):
         res = self.conv1(res)
         res = self.batchnorm1(res)
         res = self.act1(res)
-        res = self.dropout1(res)
+        if drop == True: res = self.dropout1(res)
         res = self.pad2(res)
         res = self.conv2(res)
         res = self.batchnorm2(res)
         res = self.act2(res)
-        res = self.dropout2(res)
+        if drop == True: res = self.dropout2(res)
 
         x = self.upsample(x)
         x = self.upsamplebn(x)
@@ -145,12 +145,12 @@ class Small_TCN_5(nn.Module):
         res = self.conv3(res)
         res = self.batchnorm3(res)
         res = self.act3(res)
-        res = self.dropout3(res)
+        if drop == True: res = self.dropout3(res)
         res = self.pad4(res)
         res = self.conv4(res)
         res = self.batchnorm4(res)
         res = self.act4(res)
-        res = self.dropout4(res)
+        if drop == True: res = self.dropout4(res)
         x = self.add2(x, res)
         x = self.reluadd2(x)
         return x

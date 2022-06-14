@@ -4,7 +4,9 @@
     "port": 10087,
     "max_recv": 4096,
 
-    "learningrate": 0.0005,
+    "learningrate": 0.001, 
+    "comment": 0.0005,
+    
     "epochs": 30,
 
     "autoencoder": 0,

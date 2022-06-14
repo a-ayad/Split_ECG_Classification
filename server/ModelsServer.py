@@ -146,7 +146,7 @@ class Small_TCN_5(nn.Module):
         self.reluadd5 = nn.ReLU()
 
         # Last layer
-        self.linear = nn.Linear(in_features=11000, out_features=classes, bias=False) #Ft * 250
+        self.linear = nn.Linear(in_features=Ft*1000, out_features=classes, bias=False) #Ft * 250
 
     def forward(self, x, drop=True):
         # Now we propagate through the network correctly
@@ -157,12 +157,12 @@ class Small_TCN_5(nn.Module):
         res = self.conv5(res)
         res = self.batchnorm5(res)
         res = self.act5(res)
-        res = self.dropout5(res)
+        if drop == True: res = self.dropout5(res)
         res = self.pad6(res)
         res = self.conv6(res)
         res = self.batchnorm6(res)
         res = self.act6(res)
-        res = self.dropout6(res)
+        if drop == True: res = self.dropout6(res)
         x = self.add3(x, res)
         x = self.reluadd3(x)
 
@@ -172,12 +172,12 @@ class Small_TCN_5(nn.Module):
         res = self.conv7(res)
         res = self.batchnorm7(res)
         res = self.act7(res)
-        res = self.dropout7(res)
+        if drop == True: res = self.dropout7(res)
         res = self.pad8(res)
         res = self.conv8(res)
         res = self.batchnorm8(res)
         res = self.act8(res)
-        res = self.dropout8(res)
+        if drop == True: res = self.dropout8(res)
         x = self.add4(x, res)
         x = self.reluadd4(x)
 

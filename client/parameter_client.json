@@ -4,7 +4,8 @@
     "max_recv": 4096,
 
     "batchsize": 64,
-    "learningrate": 0.0005,
+    "learningrate": 0.001, 
+    "comment": 0.0005,
 
     "count_flops": 0,
 

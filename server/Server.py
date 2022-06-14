@@ -90,8 +90,7 @@ def recv_msg(sock):
     """
     gets the message length (which corresponds to the first for bytes of the recieved bytestream) with the recvall function
 
-    :param
-        sock: socket
+    :param sock: socket
     :return: returns the data retrieved from the recvall function
     """
     raw_msglen = recvall(sock, 4)
@@ -131,7 +130,7 @@ def handle_request(sock, getid, content):
         0: calc_gradients,
         1: get_testacc,
         2: updateclientmodels,
-        3: epoch_finished,
+        3: epoch_is_finished,
     }
     switcher.get(getid, "invalid request recieved")(sock, content)
 
@@ -187,9 +186,14 @@ def updateclientmodels(sock, updatedweights):
 
 
 def dropout_mechanisms(mechanism, epoch):
+    """
+    returns the predefined dropout function
+
+    :mechanism: string to define dropout function
+    :epoch: epoch number to adjust the dropout functions
+    """
     def sigmoid(x):
         return 1 / (1 + np.exp(-x))
-
     if mechanism == 'linear':
         return (num_epochs - epoch) / num_epochs
     if mechanism == 'none':
@@ -199,6 +203,12 @@ def dropout_mechanisms(mechanism, epoch):
 
 
 def grad_preprocessing(grad):
+    """
+    Only relevant when the gradient is encoded, Apllys a scaling to transform 
+    the gradients to a range between 0 and 1
+
+    :grad: gradient
+    """
     grad_new = grad.numpy()
     for a in range(64):
         grad_new[a] = scaler.fit_transform(grad[a])
@@ -321,9 +331,13 @@ def calc_gradients(conn, msg):
     send_msg(conn, msg)
 
 
-def epoch_finished(conn, msg):
-    global epoch_unfinished
-    epoch_unfinished = 1
+def epoch_is_finished(conn, msg):
+    """
+    Sets the bool variable epoch_finished to True, to inform the Server, that the (training for one epoch / validation / testing) is finished
+    :param conn: the connected socket of the currently active client
+    """
+    global epoch_finished
+    epoch_finished = 1
 
 
 def initialize_client(conn):
@@ -331,7 +345,7 @@ def initialize_client(conn):
     called when new client connect. if new connected client is not the first connected
     client, the send the initial weights to
     the new connected client
-    :param conn:
+    :param conn: the connected socket of the currently active client
     """
     if len(connectedclients) == 1:
         msg = 0
@@ -347,50 +361,48 @@ def initialize_client(conn):
 
 
 def clientHandler(conn, addr):
-    #initialize_client(conn)
-    global epoch_unfinished
-    while True:
+    """
+    called when training on a client starts. The server communicates with the client, until the training epoch is finished
+    :param conn: the connected socket of the currently active client
+    """
+    global epoch_finished
+    while not epoch_finished:
         recieve_msg(conn)
-        # print("epoch_unfinished: ", epoch_unfinished)
-        if epoch_unfinished:
-            print("epoch finished")
-            break
-        # print("No message, wait!")
-    epoch_unfinished = 0
+    print("epoch finished")
+    epoch_finished = 0
 
 
 def train_client_for_one_epoch(conn):
+    """
+    Initiates training and validation cycle on a client
+    :param conn: the connected socket of the currently active client
+    """
+    #training cycle for one epoch
     send_request(conn, 1, 0)
-    global epoch_unfinished
-    while True:
+    global epoch_finished
+    while not epoch_finished:
         recieve_msg(conn)
-        #print("epoch_unfinished: ", epoch_unfinished)
-        if epoch_unfinished:
-            print("epoch finished")
-            break
-        #print("No message, wait!")
-    epoch_unfinished = 0
-    #val Phase
+    print("epoch finished")
+    epoch_finished = 0
+    #validation cycle
     send_request(conn, 2, 0)
-    while True:
+    while not epoch_finished:
         recieve_msg(conn)
-        # print("epoch_unfinished: ", epoch_unfinished)
-        if epoch_unfinished:
-            print("val finished")
-            break
-    epoch_unfinished = 0
+    print("val finished")
+    epoch_finished = 0
 
 
 def test_client(conn, num_epochs):
+    """
+    Initiates testing cycle on a client
+    :param conn: the connected socket of the currently active client
+    """
     send_request(conn, 3, num_epochs)
-    global epoch_unfinished
-    while True:
+    global epoch_finished
+    while not epoch_finished:
         recieve_msg(conn)
-        # print("epoch_unfinished: ", epoch_unfinished)
-        if epoch_unfinished:
-            print("epoch finished")
-            break
-    epoch_unfinished = 0
+    print("test cycle finished")
+    epoch_finished = 0
 
 
 connectedclients = []
@@ -401,15 +413,10 @@ def main():
     """
     initialize device, server model, initial client model, optimizer, loss, decoder and accepts new clients
     """
-    global grad_available
-    grad_available = 0
-
-    global epoch_unfinished
-    epoch_unfinished = 0
+    global grad_available, epoch_finished, device
+    grad_available, epoch_finished = 0, 0
 
     print(torch.version.cuda)
-    global device
-    # device = 'cpu'#
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     if (torch.cuda.is_available()):
         print("training on gpu")
@@ -426,31 +433,20 @@ def main():
     #server = ModelsServer.Small_TCN_5(5, 12)
     server.double().to(device)
 
-    """
-    global client
-    client = initial_Client()
-    client.to(device)
-    print("initial_Client complete.")
-    """
-
     global optimizer
     #optimizer = SGD(server.parameters(), lr=lr, momentum=0.9)
     optimizer = AdamW(server.parameters(), lr=lr)
-
 
     global error
     #error = nn.CrossEntropyLoss()
     error = nn.BCELoss()
     #error = nn.BCEWithLogitsLoss()
-    #print("Calculate CrossEntropyLoss complete.")
-
 
     global error_autoencoder
     error_autoencoder = nn.MSELoss()
 
     global scaler
     scaler = MinMaxScaler()
-
 
     if autoencoder:
         global decode
