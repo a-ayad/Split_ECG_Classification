@@ -9,10 +9,11 @@
     
     "epochs": 30,
 
-    "autoencoder": 0,
-    "update_mechanism": "static",
+    "autoencoder": 1,
+    "update_mechanism": "sigmoid",
+    "update_mechanism: static to use the update_threshold without a mechanism": 0,
     "update_threshold": 0,
-    "mechanism": "none",
+    "mechanism": "sigmoid",
     
     "pretrain_active": 0
 }

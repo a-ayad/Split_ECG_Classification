@@ -8,10 +8,14 @@ class Flops:
             # Does not work on every architecture
             # The paranoid switch prevents the FLOPs count
             # Solution: sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
-            from ptflops import get_model_complexity_info
+            #from ptflops import get_model_complexity_info
             from pypapi import events, papi_high as high
             # Starts internal FLOPs counter | If there is an Error: See "from pypapi import events"
-            self.high.start_counters([events.PAPI_FP_OPS,])
+            #high.start_counters([events.PAPI_FP_OPS]) #self.
+            high.start_counters([
+                events.PAPI_FP_OPS,
+                events.PAPI_TOT_CYC
+            ])
 
     def read_counter(self, context):
         if self.count:

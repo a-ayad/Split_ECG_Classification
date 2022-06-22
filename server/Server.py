@@ -1,6 +1,7 @@
 import socket
 import struct
 import pickle
+from MeCab import Model
 import numpy as np
 import json
 import torch
@@ -39,6 +40,7 @@ data_send_per_epoch = 0
 client_weights = 0
 client_weights_available = 0
 autoencoder_train = 0
+model = 'TCN'
 
 
 def send_msg(sock, content):
@@ -429,9 +431,8 @@ def main():
     torch.backends.cudnn.deterministic = True
 
     global server
-    server = ModelsServer.Server()
-    #server = ModelsServer.Small_TCN_5(5, 12)
-    server.double().to(device)
+    if model == 'TCN': server = ModelsServer.Small_TCN_5(5, 12).double().to(device)
+    if model == 'CNN': server = ModelsServer.Server().double().to(device)
 
     global optimizer
     #optimizer = SGD(server.parameters(), lr=lr, momentum=0.9)
@@ -450,9 +451,11 @@ def main():
 
     if autoencoder:
         global decode
-        decode = ModelsServer.Decode()
+        if model == 'CNN': decode = ModelsServer.Decode()
+        if model == 'TCN': decode = ModelsServer.DecodeTCN()
         if autoencoder_train == 0:
-            decode.load_state_dict(torch.load("./convdecoder_medical.pth"))
+            if model == 'CNN': decode.load_state_dict(torch.load("server/convdecoder_medical.pth"))
+            if model == 'TCN': decode.load_state_dict(torch.load("convdecoder_TCN.pth"))
             print("Decoder model loaded")
         decode.eval()
         decode.double().to(device)

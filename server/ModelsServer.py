@@ -181,7 +181,6 @@ class Small_TCN_5(nn.Module):
         x = self.add4(x, res)
         x = self.reluadd4(x)
 
-        """
         # Fifth block
         res = self.pad9(x)
         # res = self.pad5(res)
@@ -196,7 +195,6 @@ class Small_TCN_5(nn.Module):
         res = self.dropout10(res)
         x = self.add5(x, res)
         x = self.reluadd5(x)
-        """
 
         # Linear layer to classify
         x = x.flatten(1)
@@ -204,3 +202,26 @@ class Small_TCN_5(nn.Module):
         o = torch.sigmoid(o)
         return o  # Return directly without softmax
 
+
+class DecodeTCN(nn.Module):
+    """
+    decoder model
+    """ 
+    def __init__(self):
+        super(DecodeTCN, self).__init__()
+        self.t_convb = nn.ConvTranspose1d(5, 8, 4, stride=2, padding=1)
+        self.t_convc = nn.ConvTranspose1d(8, 11, 4, stride=2, padding=1)
+        self.t_convd = nn.ConvTranspose1d(11, 11, 4, stride=2, padding=1)
+        #self.t_conve = nn.ConvTranspose1d(144, 192, 2, stride=2, padding=1)
+
+    def forward(self, x):
+        #print("decode 1 Layer: ", x.size())
+        x = self.t_convb(x)
+        #print("decode 2 Layer: ", x.size())
+        x = self.t_convc(x)
+        #print("decode 3 Layer: ", x.size())
+        x = self.t_convd(x)
+        #print("decode 4 Layer: ", x.size())
+        #x = self.t_conve(x)
+        #print("decode 4 Layer: ", x.size())
+        return x

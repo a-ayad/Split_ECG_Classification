@@ -10,17 +10,22 @@ from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
 import time
 import wfdb
-import utils
 import ast
 import random
 import os.path
+import AE_Models as Models
 from torch.autograd import Variable
 from sklearn.preprocessing import MinMaxScaler
+import sys
+# Set path variables to load the PTB-XL dataset and its scaler
 cwd = os.path.dirname(os.path.abspath(__file__))
-mlb_path = os.path.join(cwd,  "..", "Benchmark", "output", "mlb.pkl")
-scaler_path = os.path.join(cwd,  "..", "Benchmark", "output", "standard_scaler.pkl")
-ptb_path = os.path.join(cwd,  "..", "server", "PTB-XL", "ptb-xl/")
+cwd = os.path.dirname(cwd)
+mlb_path = os.path.join(cwd, "mlb.pkl")
+scaler_path = os.path.join(cwd)
+ptb_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/")
+output_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1", "output/")
 path_ecg_synthetic = os.path.join(cwd, "..", "ECG-Synthetic")
+import utils
 
 batchsize = 64
 test_batches = 1500
@@ -29,6 +34,7 @@ lr = 0.001
 prev_loss = 999
 diverge_tresh = 1.1
 lr_adapt = 0.5
+model = 'TCN' #Set Model to 'TCN' or 'CNN'
 
 class PTB_XL(Dataset):
     def __init__(self, stage=None):
@@ -187,313 +193,6 @@ def get_dataloader(phase: str, batch_size: int = 64) -> DataLoader:
     return dataloader
 
 
-class Encode192(nn.Module):
-    """
-    encoder model
-    """
-    def __init__(self):
-        super(Encode192, self).__init__()
-        self.conva = nn.Conv1d(192, 144, 2, stride=2,  padding=1)
-        self.convb = nn.Conv1d(144, 96, 2, stride=2, padding=0)
-        self.convc = nn.Conv1d(96, 48, 2, stride=2,  padding=0)
-        self.convd = nn.Conv1d(48, 24, 2, stride=2, padding=0)##
-
-    def forward(self, x):
-        x = self.conva(x)
-        #print("encode 1 Layer: ", x.size())
-        x = self.convb(x)
-        #print("encode 2 Layer: ", x.size())
-        x = self.convc(x)
-        #print("encode 3 Layer: ", x.size())
-        x = self.convd(x)
-        #print("encode 4 Layer: ", x.size())
-        #print("encode 5 Layer: ", x.size())
-        return x
-
-class Encode64(nn.Module):
-    """
-    encoder model
-    """
-    def __init__(self):
-        super(Encode64, self).__init__()
-        self.conva = nn.Conv1d(64, 32, 2, stride=2,  padding=0)
-        self.convb = nn.Conv1d(32, 16, 2, stride=2, padding=0)
-        self.convc = nn.Conv1d(16, 8, 2, stride=2,  padding=0)
-        self.convd = nn.Conv1d(8, 4, 2, stride=1, padding=0)##
-
-    def forward(self, x):
-        x = self.conva(x)
-        #print("encode 1 Layer: ", x.size())
-        x = self.convb(x)
-        #print("encode 2 Layer: ", x.size())
-        x = self.convc(x)
-        #print("encode 3 Layer: ", x.size())
-        x = self.convd(x)
-        #print("encode 4 Layer: ", x.size())
-        return x
-
-class Encode32small(nn.Module):
-    """
-    encoder model
-    """
-    def __init__(self):
-        super(Encode32small, self).__init__()
-        self.conva = nn.Conv1d(32, 16, 2, stride=2,  padding=0)
-        self.convb = nn.Conv1d(16, 8, 2, stride=2, padding=1)
-        self.convc = nn.Conv1d(8, 4, 2, stride=2,  padding=1)
-
-    def forward(self, x):
-        x = self.conva(x)
-        #print("encode 1 Layer: ", x.size())
-        x = self.convb(x)
-        #print("encode 2 Layer: ", x.size())
-        x = self.convc(x)
-        #print("encode 3 Layer: ", x.size())
-        return x
-
-class Encode32(nn.Module):
-    """
-    encoder model
-    """
-    def __init__(self):
-        super(Encode32, self).__init__()
-        self.conva = nn.Conv1d(32, 16, 2, stride=2, padding=0)
-        self.convb = nn.Conv1d(16, 8, 2, stride=2,  padding=1)
-        self.convc = nn.Conv1d(8, 8, 2, stride=2, padding=1)##
-        self.convd = nn.Conv1d(8, 4, 2, stride=2, padding=0)  ##
-        self.conve = nn.Conv1d(4, 4, 2, stride=2, padding=0)
-
-    def forward(self, x):
-        x = self.conva(x)
-        #print("encode 1 Layer: ", x.size())
-        x = self.convb(x)
-        #print("encode 2 Layer: ", x.size())
-        x = self.convc(x)
-        #print("encode 3 Layer: ", x.size())
-        x = self.convd(x)
-        #print("encode 4 Layer: ", x.size())
-        x = self.conve(x)
-        #print("encode 5 Layer: ", x.size())
-        return x
-
-
-class Decode192(nn.Module):
-    """
-    decoder model
-    """
-    def __init__(self):
-        super(Decode192, self).__init__()
-        self.t_convb = nn.ConvTranspose1d(24, 48, 2, stride=2, padding=0)
-        self.t_convc = nn.ConvTranspose1d(48, 96, 2, stride=2, padding=0)
-        self.t_convd = nn.ConvTranspose1d(96, 144, 2, stride=2, padding=0)
-        self.t_conve = nn.ConvTranspose1d(144, 192, 2, stride=2, padding=1)
-
-    def forward(self, x):
-        #print("decode 1 Layer: ", x.size())
-        x = self.t_convb(x)
-        #print("decode 2 Layer: ", x.size())
-        x = self.t_convc(x)
-        #print("decode 3 Layer: ", x.size())
-        x = self.t_convd(x)
-        #print("decode 4 Layer: ", x.size())
-        x = self.t_conve(x)
-        #print("decode 4 Layer: ", x.size())
-        return x
-
-class Decode64(nn.Module):
-    """
-    decoder model
-    """
-    def __init__(self):
-        super(Decode64, self).__init__()
-        self.t_conva = nn.ConvTranspose1d(4, 8, 2, stride=1)
-        self.t_convb = nn.ConvTranspose1d(8, 16, 2, stride=2)
-        self.t_convc = nn.ConvTranspose1d(16, 32, 2, stride=2)
-        self.t_convd = nn.ConvTranspose1d(32, 64, 2, stride=2)
-
-    def forward(self, x):
-        x = self.t_conva(x)
-        #print("decode 1 Layer: ", x.size())
-        x = self.t_convb(x)
-        #print("decode 2 Layer: ", x.size())
-        x = self.t_convc(x)
-        #print("decode 3 Layer: ", x.size())
-        x = self.t_convd(x)
-        #print("decode 4 Layer: ", x.size())
-        return x
-
-class Decode32small(nn.Module):
-    """
-    decoder model
-    """
-    def __init__(self):
-        super(Decode32small, self).__init__()
-        self.t_conva = nn.ConvTranspose1d(4, 8, 2, stride=2, padding=1)
-        self.t_convb = nn.ConvTranspose1d(8, 16, 2, stride=2, padding=1)
-        self.t_convc = nn.ConvTranspose1d(16, 32, 2, stride=2, padding=0)
-
-    def forward(self, x):
-        x = self.t_conva(x)
-        #print("decode 1 Layer: ", x.size())
-        x = self.t_convb(x)
-        #print("decode 2 Layer: ", x.size())
-        x = self.t_convc(x)
-        #print("decode 3 Layer: ", x.size())
-        return x
-
-class Decode32(nn.Module):
-    """
-    decoder model
-    """
-    def __init__(self):
-        super(Decode32, self).__init__()
-        self.t_conva = nn.ConvTranspose1d(4, 4, 2, stride=2, padding=0)
-        self.t_convb = nn.ConvTranspose1d(4, 8, 2, stride=2, padding=0)
-        self.t_convc = nn.ConvTranspose1d(8, 8, 2, stride=2, padding=1)
-        self.t_convd = nn.ConvTranspose1d(8, 16, 2, stride=2,  padding=1)
-        self.t_conve = nn.ConvTranspose1d(16, 32, 2, stride=2, padding=0)
-
-    def forward(self, x):
-        x = self.t_conva(x)
-        #print("decode 1 Layer: ", x.size())
-        x = self.t_convb(x)
-        #print("decode 2 Layer: ", x.size())
-        x = self.t_convc(x)
-        #print("decode 3 Layer: ", x.size())
-        x = self.t_convd(x)
-        #print("decode 4 Layer: ", x.size())
-        x = self.t_conve(x)
-        #print("decode 5 Layer: ", x.size())
-        return x
-
-class Grad_Encoder(nn.Module):
-    """
-    encoder model
-    """
-    def __init__(self):
-        super(Grad_Encoder, self).__init__()
-        self.conva = nn.Conv1d(192, 144, 2, stride=2,  padding=1)
-        self.convb = nn.Conv1d(144, 96, 2, stride=2, padding=0)
-        self.convc = nn.Conv1d(96, 48, 2, stride=2,  padding=0)
-        self.convd = nn.Conv1d(48, 24, 2, stride=2, padding=0)##
-
-    def forward(self, x):
-        x = self.conva(x)
-        #print("encode 1 Layer: ", x.size())
-        x = self.convb(x)
-        #print("encode 2 Layer: ", x.size())
-        x = self.convc(x)
-        #print("encode 3 Layer: ", x.size())
-        x = self.convd(x)
-        #print("encode 4 Layer: ", x.size())
-        #print("encode 5 Layer: ", x.size())
-        return x
-
-class Grad_Decoder(nn.Module):
-    """
-    decoder model
-    """
-    def __init__(self):
-        super(Grad_Decoder, self).__init__()
-        self.t_convb = nn.ConvTranspose1d(24, 48, 2, stride=2, padding=0)
-        self.t_convc = nn.ConvTranspose1d(48, 96, 2, stride=2, padding=0)
-        self.t_convd = nn.ConvTranspose1d(96, 144, 2, stride=2, padding=0)
-        self.t_conve = nn.ConvTranspose1d(144, 192, 2, stride=2, padding=1)
-
-    def forward(self, x):
-        #print("decode 1 Layer: ", x.size())
-        x = self.t_convb(x)
-        #print("decode 2 Layer: ", x.size())
-        x = self.t_convc(x)
-        #print("decode 3 Layer: ", x.size())
-        x = self.t_convd(x)
-        #print("decode 4 Layer: ", x.size())
-        x = self.t_conve(x)
-        #print("decode 4 Layer: ", x.size())
-        return x
-
-# just the part of the clientmidel before the autoencoder
-
-class Client_PTB(nn.Module):
-    """
-    client model
-    """
-    def __init__(self):
-        super(Client_PTB, self).__init__()
-        self.conv1 = nn.Conv1d(12, 192, kernel_size=3, stride=2, dilation=1, padding=1)
-        nn.init.kaiming_normal_(self.conv1.weight, mode='fan_out', nonlinearity='relu')
-        self.relu1 = nn.ReLU()
-        self.pool1 = nn.MaxPool1d(kernel_size=3, stride=2)
-        self.drop1 = nn.Dropout(0.4)
-        self.conv2 = nn.Conv1d(192, 192, kernel_size=3, stride=2, dilation=1, padding=1)
-        nn.init.kaiming_normal_(self.conv2.weight, mode='fan_out', nonlinearity='relu')
-        self.relu2 = nn.ReLU()
-        self.pool2 = nn.MaxPool1d(kernel_size=3, stride=2)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.relu1(x)
-        x = self.pool1(x)
-        x = self.drop1(x)
-        x = self.conv2(x)
-        x = self.relu2(x)
-        x = self.pool2(x)
-        #print("Client_PTB output", x.shape)
-        return x
-
-
-class Server_PTB(nn.Module):
-    """
-    client model
-    """
-    def __init__(self):
-        super(Server_PTB, self).__init__()
-        self.drop2 = nn.Dropout(0.4)
-        self.conv3 = nn.Conv1d(192, 192, kernel_size=3, stride=2, dilation=1, padding=1)
-        nn.init.kaiming_normal_(self.conv3.weight, mode='fan_out', nonlinearity='relu')
-        self.relu3 = nn.ReLU()
-        #self.pool3 = nn.MaxPool1d(kernel_size=3, stride=2)
-        self.drop3 = nn.Dropout(0.4)
-        self.conv4 = nn.Conv1d(192, 192, kernel_size=3, stride=2, dilation=1, padding=1)
-        nn.init.kaiming_normal_(self.conv4.weight, mode='fan_out', nonlinearity='relu')
-        self.relu4 = nn.ReLU()
-        #self.pool4 = nn.MaxPool1d(kernel_size=3, stride=2)
-        self.drop4 = nn.Dropout(0.4)
-        self.conv5 = nn.Conv1d(192, 192, kernel_size=3, stride=2, dilation=1, padding=1)
-        nn.init.kaiming_normal_(self.conv5.weight, mode='fan_out', nonlinearity='relu')
-        self.relu5 = nn.ReLU()
-        #self.pool5 = nn.MaxPool1d(kernel_size=3, stride=2)
-        self.drop5 = nn.Dropout(0.4)
-        self.conv6 = nn.Conv1d(192, 192, kernel_size=3, stride=2, dilation=1, padding=1)
-        nn.init.kaiming_normal_(self.conv6.weight, mode='fan_out', nonlinearity='relu')
-        self.relu6 = nn.ReLU()
-        self.pool6 = nn.MaxPool1d(kernel_size=3, stride=2)
-        #self.pool5 = nn.MaxPool1d(kernel_size=3, stride=2)
-        #self.avgpool = nn.AdaptiveAvgPool1d((1))
-        self.flatt = nn.Flatten(start_dim=1)
-        self.linear2 = nn.Linear(in_features=192, out_features=5, bias=True)
-    def forward(self, x):
-        x = self.drop2(x)
-        x = self.conv3(x)
-        x = self.relu3(x)
-        #x = self.pool3(x)
-        x = self.drop3(x)
-        x = self.conv4(x)
-        x = self.relu4(x)
-        #x = self.pool4(x)
-        x = self.drop4(x)
-        x = self.conv5(x)
-        x = self.relu5(x)
-        #x = self.pool5(x)
-        x = self.drop5(x)
-        x = self.conv6(x)
-        x = self.relu6(x)
-        x = self.pool6(x)
-        x = self.flatt(x)
-        x = torch.sigmoid(self.linear2(x))
-        return x
-
-
 def test_PTB(loss_last_10_ptb, e):
     batch_nr = 0
     loss_ptb_epoch = 0
@@ -542,6 +241,7 @@ def start_training():
     total_time = time.time()
     data = []
     datalist= []
+    """
     for a in range(1):
         for b in range(64):
             data.append(random_num())
@@ -555,7 +255,7 @@ def start_training():
     }
     for b, batch in enumerate(AE_PTB_testdata):
         pass
-
+    """
 
     time_train_epoch = time.time()
     for e in range(epoch):
@@ -566,7 +266,7 @@ def start_training():
         if e == 1:
             time_train_epoch = time.time() - time_train_epoch
             print("estimated_time_total: ", time_train_epoch*epoch/60, " min")
-        for b, batch in enumerate(dataloaders['ae']):#AE_PTB_testdata):#dataloaders['ae']):
+        for b, batch in enumerate(AE_PTB_testdata): #dataloaders['ae']):AE_PTB_testdata):#dataloaders['ae'])
                 x_train, label_train = batch
                 #x_train = datalist[b]
                 #print("x_train: ", x_train)
@@ -574,19 +274,23 @@ def start_training():
                 #print("x_train shape: ", x_train.shape)
 
                 x_train_2 = client_ptb(x_train)
-                if b == 0:
-                    print("input AE mean ", torch.mean(x_train_2).item())
-                    print("input AE var: ", torch.var(x_train_2).item())
+                #if b == 0:
+                #    print("input AE mean ", torch.mean(x_train_2).item())
+                #    print("input AE var: ", torch.var(x_train_2).item())
                 #x_train = x_train.reshape(-1, 128)
                 #print("output client: ",x_train_2.size())
                 optimizerencode.zero_grad()
                 optimizerdecode.zero_grad()
+                if (e == 1 and b == 1):
+                    print("shape: ", x_train_2.shape)
                 output_train_enc = encode(x_train_2)
+                if (e == 1 and b == 1):
+                    print("encoded shape: ", output_train_enc.shape)
                 #print(output_train_enc.shape)
                 output_train = decode(output_train_enc)
-                if b == 0:
-                    print("output AE mean: ", torch.mean(output_train).item())
-                    print("output AE var: ", torch.var(output_train).item())
+                #if b == 0:
+                #    print("output AE mean: ", torch.mean(output_train).item())
+                #    print("output AE var: ", torch.var(output_train).item())
                 #if b == 0:
                 #    print(output_train)
                 #print("output decoder: ",output_train.size())
@@ -618,7 +322,7 @@ def start_training():
             final_loss = loss_10 / 10
             loss_last_10.clear()
 
-        loss_last_10_ptb, loss_train_epoch_ptb = test_PTB(loss_last_10_ptb, e)
+        #loss_last_10_ptb, loss_train_epoch_ptb = test_PTB(loss_last_10_ptb, e)
 
 
         #if loss_train_epoch_ptb < 0.3: #with same dataset : 0.174317
@@ -627,11 +331,11 @@ def start_training():
             #3Layers same Dataset: 0.128
             #Saved 51 epochs: 0.216848
             #print("saved")
-            #torch.save(encode.state_dict(), "../client/convencoder_medical.pth")
+        torch.save(encode.state_dict(), "convencoder_TCN.pth")
             #encode2 = Encode64()
             #encode2.load_state_dict(torch.load("./convencoder_medical.pth"))
             #encode2.eval()
-            #torch.save(decode.state_dict(), "../server/convdecoder_medical.pth")
+        torch.save(decode.state_dict(), "convdecoder_TCN.pth")
             #prevloss = loss_test
 
     print("total time:", time.time()-total_time)
@@ -916,13 +620,7 @@ def main():
     config = Config()
 
 
-    global X_train
-    global X_val
-
-    global y_val
-    global y_train
-    global y_test
-    global X_test
+    global X_train, X_val, y_val, y_train, y_test, X_test
     sampling_frequency = 100
     datafolder = ptb_path
     task = 'superdiagnostic'
@@ -954,7 +652,7 @@ def main():
 
     import pickle
 
-    standard_scaler = pickle.load(open(scaler_path, "rb"))
+    standard_scaler = pickle.load(open(scaler_path + '/standard_scaler.pkl', "rb"))
 
     X_train = utils.apply_standardizer(X_train, standard_scaler)
     X_val = utils.apply_standardizer(X_val, standard_scaler)
@@ -984,29 +682,22 @@ def main():
     error_MinMax = nn.MSELoss()
     #error_AE = nn.CrossEntropyLoss()
 
-    global client_ptb
-    client_ptb = Client_PTB()
-    client_ptb.double().to(device)
+    global client_ptb, server_ptb, encode, decode, decode_grad, encode_grad
+    if model == 'TCN':
+        client_ptb = Models.Small_TCN_5_Client(5, 12).double().to(device)
+        server_ptb = Models.Small_TCN_5_Server(5, 12).double().to(device)
+        encode = Models.EncodeTCN().double().to(device)
+        decode = Models.DecodeTCN().double().to(device)
+        encode_grad = Models.Grad_Encoder().double().to(device)
+        decode_grad = Models.Grad_Decoder().double().to(device)
+    else:
+        client_ptb = Models.Client_PTB().double().to(device)
+        server_ptb = Models.Server_PTB().double().to(device)
+        encode = Models.Encode192().double().to(device)
+        decode = Models.Decode192().double().to(device)
+        encode_grad = Models.Grad_Encoder().double().to(device)
+        decode_grad = Models.Grad_Decoder().double().to(device)
 
-    global server_ptb
-    server_ptb = Server_PTB()
-    server_ptb.double().to(device)
-
-    global encode
-    encode = Encode192()
-    encode.double().to(device)
-
-    global decode
-    decode = Decode192()
-    decode.double().to(device)
-
-    global encode_grad
-    encode_grad = Grad_Encoder()
-    encode_grad.double().to(device)
-
-    global decode_grad
-    decode_grad = Grad_Decoder()
-    decode_grad.double().to(device)
 
     global scaler
     scaler = MinMaxScaler()
@@ -1018,8 +709,8 @@ def main():
     global server_optimizer
     server_optimizer = Adam(server_ptb.parameters(), lr=0.001)  ###
 
-    #start_training()
-    start_training_grad()
+    start_training()
+    #start_training_grad()
 
 
 if __name__ == '__main__':

@@ -113,7 +113,7 @@ class Small_TCN_5(nn.Module):
         self.reluadd2 = nn.ReLU()
 
     def forward(self, x, drop=True):
-        # Now we propagate through the network correctly
+        # Now we propagate through the network
         x = self.pad0(x)
         x = self.conv0(x)
         x = self.batchnorm0(x)
@@ -153,5 +153,29 @@ class Small_TCN_5(nn.Module):
         if drop == True: res = self.dropout4(res)
         x = self.add2(x, res)
         x = self.reluadd2(x)
+        return x
+
+
+class EncodeTCN(nn.Module):
+    """
+    encoder model
+    """
+    def __init__(self):
+        super(EncodeTCN, self).__init__()
+        self.conva = nn.Conv1d(11, 11, 4, stride=2,  padding=1)
+        self.convb = nn.Conv1d(11, 8, 4, stride=2, padding=1)
+        self.convc = nn.Conv1d(8, 5, 4, stride=2,  padding=1)
+        #self.convd = nn.Conv1d(48, 24, 2, stride=2, padding=0)##
+
+    def forward(self, x):
+        x = self.conva(x)
+        #print("encode 1 Layer: ", x.size())
+        x = self.convb(x)
+        #print("encode 2 Layer: ", x.size())
+        x = self.convc(x)
+        #print("encode 3 Layer: ", x.size())
+        #x = self.convd(x)
+        #print("encode 4 Layer: ", x.size())
+        #print("encode 5 Layer: ", x.size())
         return x
 

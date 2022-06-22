@@ -3,6 +3,7 @@ import struct
 import socket
 import pickle
 import json
+from sympy import Mod
 from torch.optim import SGD, Adam, AdamW
 import sys
 import time
@@ -30,7 +31,7 @@ mlb_path = os.path.join(cwd, "mlb.pkl")
 scaler_path = os.path.join(cwd)
 ptb_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/")
 output_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1", "output/")
-
+model = 'TCN'
 
 # Set parameters fron json file
 f = open('client/parameter_client.json', )
@@ -367,7 +368,7 @@ def epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc
         print("MegaFLOPS_send", flops_counter.flops_send/1000000)
         print("MegaFLOPS_recieve", flops_counter.flops_recieve/1000000)
 
-    if weights_and_biases & count_flops:
+    if weights_and_biases and count_flops:
         wandb.log({"Batches Abortrate": batches_aborted / total_train_nr, "MegaFLOPS Client Encoder": flops_counter.flops_encoder_epoch/1000000,
            "MegaFLOPS Client Forward": flops_counter.flops_forward_epoch / 1000000,
            "MegaFLOPS Client Backprop": flops_counter.flops_backprop_epoch / 1000000, "MegaFLOPS Send": flops_counter.flops_send / 1000000,
@@ -650,8 +651,8 @@ def main():
 
     #Initialize client, optimizer, error-function, potentially encoder and grad_encoder
     global client
-    #client = Models.Client()
-    client = Models.Small_TCN_5(5, 12)
+    if model == 'TCN': client = Models.Small_TCN_5(5, 12)
+    if model == 'CNN': client = Models.Client()
     print("Start Client")
     client.double().to(device)
 
@@ -666,10 +667,12 @@ def main():
 
     if autoencoder:
         global encode
-        encode = Models.Encode()
+        if model == 'CNN': encode = Models.Encode()
+        if model == 'TCN': encode = Models.EncodeTCN()
         print("Start Encoder")
         if autoencoder_train == 0:
-            encode.load_state_dict(torch.load("./convencoder_medical.pth"))  # CPU
+            if model == 'CNN': encode.load_state_dict(torch.load("client/convencoder_medical.pth"))  # CPU
+            if model == 'TCN': encode.load_state_dict(torch.load("convencoder_TCN.pth"))
             print("Encoder model loaded")
         encode.eval()
         print("Start eval")

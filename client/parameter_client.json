@@ -9,7 +9,7 @@
 
     "count_flops": 0,
 
-    "autoencoder": 0,
+    "autoencoder": 1,
 
     "autoencoder_train": 0,
     "grad_encode": 0,
