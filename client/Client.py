@@ -173,7 +173,12 @@ def train_epoch(s, content):
     :param content:
     """
     #new_split() #new random dist between train and val
-    loss_grad_total = 0
+    loss_grad_total, train_loss = 0, 0
+
+    batches_aborted, total_train_nr, total_val_nr, total_test_nr = 0, 0, 0, 0
+    hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc_train = 0, 0, 0, 0, 0
+    acc, f1, auc = 0,0,0
+
     global epoch
     epoch += 1
     flops_counter.reset()
@@ -190,12 +195,7 @@ def train_epoch(s, content):
             train_grad_active = 1
 
     Communication.reset_tracker()#Resets all communication trackers (MBs send/recieved...)
-    train_loss = 0
-    batches_aborted, total_train_nr, total_val_nr, total_test_nr = 0, 0, 0, 0
-    hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc_train = 0, 0, 0, 0, 0
 
-    # Define training metrics
-    acc, f1, auc = 0,0,0
     test_accuracy = Accuracy(num_classes=5, average=average_setting)
     test_f1 = F1Score(num_classes=5, average=average_setting)
     test_auc = AUROC(num_classes=5, average=average_setting)
@@ -222,22 +222,17 @@ def train_epoch(s, content):
 
         optimizer.zero_grad()  # sets gradients to 0 - start for backprop later
         client_output_backprop = client(x_train) #Forwards propagation
-        client_output_train = client_output_backprop.detach().clone()
+        client_output_send = client_output_backprop.detach().clone()
 
         flops_counter.read_counter("forward") #Tracks forward propagation FLOPs
 
-        client_output_train_without_ae_send = 0
+        client_output_train_not_encoded = 0
         if autoencoder:
             if train_active: #Only relevant if the AE is trained simultainiously to the actual model
                 optimizerencode.zero_grad()
-
-            client_encoded = encode(client_output_train) #Forward propagation encoder
+                client_output_train_not_encoded = client_output_send.detach().clone()
+            client_encoded = encode(client_output_send) #Forward propagation encoder
             client_output_send = client_encoded.detach().clone()
-
-            if train_active:
-                client_output_train_without_ae_send = client_output_train.detach().clone()
-        else:
-            client_output_send = client_output_train.detach().clone()
 
         flops_counter.read_counter("encoder") #Tracks encoder FLOPs
 
@@ -246,7 +241,7 @@ def train_epoch(s, content):
         #Creates a message to the Server, containing model output and training information
         msg = {
             'client_output_train': client_output_send,
-            'client_output_train_without_ae': client_output_train_without_ae_send,
+            'client_output_train_without_ae': client_output_train_not_encoded,
             'label_train': label_train,
             'batchsize': batchsize,
             'train_active': train_active,
@@ -271,9 +266,9 @@ def train_epoch(s, content):
         #Only relevant if the Gradient AE is active and potentially trains simultainiously to the actual model
         global scaler
         scaler = msg["scaler"]
+        encoder_grad_server = 0
         if msg["grad_encode"]: 
-            if train_grad_active:
-                optimizer_grad_decoder.zero_grad()
+            if train_grad_active: optimizer_grad_decoder.zero_grad()
             client_grad = Variable(client_grad, requires_grad=True)
             client_grad_decode = grad_decoder(client_grad) #Decoding gradient
             if train_grad_active:
@@ -282,18 +277,15 @@ def train_epoch(s, content):
                 loss_grad_autoencoder.backward()
                 encoder_grad_server = client_grad.grad.detach().clone()#
                 optimizer_grad_decoder.step()
-            else:
-                encoder_grad_server = 0
-            client_grad_decode = grad_postprocessing(client_grad_decode.detach().clone().cpu()) #Revert scaling, that was applient at the server
+            client_grad_decode = grad_postprocessing(client_grad_decode.detach().clone().cpu())
 
-        else:
-            if msg["client_grad_abort"] == 0: #If no gradient was send
+        else: #If the gradient is not encoded and not aborted:
+            if msg["client_grad_abort"] == 0:
                 client_grad_decode = client_grad.detach().clone()
-            encoder_grad_server = 0
 
         start_time_batch_backward = time.time()
 
-        if client_grad == "abort": #If the Client Update got aborted
+        if client_grad == "abort": #If the client update got aborted
             batches_aborted += 1
         else:
             if train_active:
@@ -312,6 +304,9 @@ def train_epoch(s, content):
         train_loss += msg["train_loss"]
         output_train = msg["output_train"]
 
+        active_training_time_batch_client += time.time() - start_time_batch_backward
+
+        #Evaluation of the current batch
         acc +=test_accuracy(output_train.detach().clone().cpu(), label_train.detach().clone().cpu().int()).numpy()
         f1 += test_f1(output_train.detach().clone().cpu(), label_train.detach().clone().cpu().int()).numpy()
         auc += test_auc(output_train.detach().clone().cpu(), label_train.detach().clone().cpu().int()).numpy()
@@ -372,18 +367,16 @@ def epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc
         print("MegaFLOPS_send", flops_counter.flops_send/1000000)
         print("MegaFLOPS_recieve", flops_counter.flops_recieve/1000000)
 
-    #if weights_and_biases:
-        #wandb.log({"Batches Abortrate": batches_aborted / total_train_nr, "MegaFLOPS Client Encoder": flops_counter.flops_encoder_epoch/1000000,
-        #           "MegaFLOPS Client Forward": flops_counter.flops_forward_epoch / 1000000,
-        #           "MegaFLOPS Client Backprop": flops_counter.flops_backprop_epoch / 1000000, "MegaFLOPS Send": flops_counter.flops_send / 1000000,
-        #           "MegaFLOPS Recieve": flops_counter.flops_recieve / 1000000},
-        #          commit=False)
+    if weights_and_biases & count_flops:
+        wandb.log({"Batches Abortrate": batches_aborted / total_train_nr, "MegaFLOPS Client Encoder": flops_counter.flops_encoder_epoch/1000000,
+           "MegaFLOPS Client Forward": flops_counter.flops_forward_epoch / 1000000,
+           "MegaFLOPS Client Backprop": flops_counter.flops_backprop_epoch / 1000000, "MegaFLOPS Send": flops_counter.flops_send / 1000000,
+           "MegaFLOPS Recieve": flops_counter.flops_recieve / 1000000},
+          commit=False)
 
-    global auc_train_log
+    global auc_train_log, accuracy_train_log, batches_abort_rate_total
     auc_train_log = epoch_auc
-    global accuracy_train_log
     accuracy_train_log = epoch_accuracy
-    global batches_abort_rate_total
     batches_abort_rate_total.append(batches_aborted / total_train_nr)
 
 
@@ -395,23 +388,21 @@ def val_stage(s, content):
     """
     total_val_nr, val_loss_total = 0, 0
     precision_epoch, recall_epoch, f1_epoch, auc_val, accuracy_sklearn,  accuracy_custom = 0, 0, 0, 0, 0, 0
-
     acc, f1, auc = 0,0,0
     val_accuracy = Accuracy(num_classes=5, average=average_setting)
     val_f1 = F1Score(num_classes=5, average=average_setting)
     val_auc = AUROC(num_classes=5, average=average_setting)
 
-    with torch.no_grad():
+    with torch.no_grad(): #No training involved, thus no gradient needed
         for b_t, batch_t in enumerate(val_loader):
             x_val, label_val = batch_t
             x_val, label_val = x_val.to(device), label_val.double().to(device)
-            optimizer.zero_grad()
+            #optimizer.zero_grad()
             output_val = client(x_val, drop=False)
-            client_output_val = output_val.clone().detach().requires_grad_(True)
             if autoencoder:
-                client_output_val = encode(client_output_val)
+                output_val = encode(output_val)
 
-            msg = {'client_output_val/test': client_output_val,
+            msg = {'client_output_val/test': output_val,
                    'label_val/test': label_val,}
             Communication.send_msg(s, 1, msg)
             msg = Communication.recieve_msg(s)
@@ -464,9 +455,7 @@ def val_stage(s, content):
         f1_epoch / total_val_nr, val_loss_total / total_val_nr)
     print("status_epoch_val: ", status_epoch_val)
 
-
-    msg = 0
-    Communication.send_msg(s, 3, msg)
+    Communication.send_msg(s, 3, 0)
 
 
 def test_stage(s, epoch):
@@ -486,13 +475,12 @@ def test_stage(s, epoch):
         for b_t, batch_t in enumerate(val_loader):
             x_test, label_test = batch_t
             x_test, label_test = x_test.to(device), label_test.double().to(device)
-            optimizer.zero_grad()
+            #optimizer.zero_grad()
             output_test = client(x_test, drop=False)
-            client_output_test = output_test.clone().detach().requires_grad_(True)
             if autoencoder:
-                client_output_test = encode(client_output_test)
+                output_test = encode(output_test)
 
-            msg = {'client_output_val/test': client_output_test,
+            msg = {'client_output_val/test': output_test,
                    'label_val/test': label_test,
                    }
             Communication.send_msg(s, 1, msg)
