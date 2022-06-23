@@ -22,6 +22,7 @@ import Communication
 import Flops
 import pickle
 import warnings
+import thop
 warnings.simplefilter("ignore", UserWarning)
 from torchmetrics.classification import Accuracy, F1Score, AUROC
 # Set path variables to load the PTB-XL dataset and its scaler
@@ -443,6 +444,9 @@ def val_stage(s, content):
     print("status_val_new: ", status_train)
 
     if weights_and_biases:
+        wandb.define_metric("AUC_val", summary="max")
+        wandb.define_metric("Accuracy_val", summary="max")
+        #wandb.log({"AUC_val_max": epoch_auc, "Accuracy_val_max": epoch_accuracy}, commit=False)
         wandb.log({"Loss_val": val_loss_total / total_val_nr,
                "Accuracy_val": epoch_accuracy,
                "F1_val": epoch_f1,
@@ -577,6 +581,16 @@ def initialize_model(s, msg):
         client.load_state_dict(msg, strict=False)
         print("model successfully initialized")
 
+def count_flops_client():
+    #if count_flops:
+    client_flops_forward, params = thop.profile(client, inputs=(torch.rand(batchsize, 12, 1000).double().to(device),))
+    print("Client MegaFLOPs forward: ", client_flops_forward/1000000)
+    if model == 'CNN':
+        encoder_flops_forward, params = thop.profile(encode, inputs=(torch.rand(batchsize, 192, 1000).double().to(device),))
+        print("Client MegaFLOPs encoder: ", encoder_flops_forward/1000000)
+
+
+
 
 def main():
     """
@@ -694,6 +708,7 @@ def main():
         global error_grad_autoencoder
         error_grad_autoencoder = nn.MSELoss()
 
+    count_flops_client()
     #Connect to the server
     s = socket.socket()
     print("Start socket connect")

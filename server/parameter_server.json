@@ -10,7 +10,7 @@
     "epochs": 30,
 
     "autoencoder": 1,
-    "update_mechanism": "sigmoid",
+    "update_mechanism": "static",
     "update_mechanism: static to use the update_threshold without a mechanism": 0,
     "update_threshold": 0,
     "mechanism": "sigmoid",

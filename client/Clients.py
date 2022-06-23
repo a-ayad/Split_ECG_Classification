@@ -27,6 +27,9 @@ import math
 import os.path
 import utils
 import Models
+import Flops
+import Communication
+from torchmetrics.classification import Accuracy, F1Score, AUROC
 #np.set_printoptions(threshold=np.inf)
 cwd = os.path.dirname(os.path.abspath(__file__))
 mlb_path = os.path.join(cwd, "..","Benchmark", "output", "mlb.pkl")
@@ -42,6 +45,8 @@ pretrain_this_client = 0
 simultrain_this_client = 0
 pretrain_epochs = 50
 IID = 0
+average_setting = 'micro'
+weights_and_biases = 1
 
 f = open('parameter_client.json', )
 data = json.load(f)
@@ -64,14 +69,14 @@ grad_encode = data["grad_encode"]
 train_gradAE_active = data["train_gradAE_active"]
 deactivate_grad_train_after_num_epochs = data["deactivate_grad_train_after_num_epochs"]
 
-wandb.init(config={
-  "learning_rate": lr,
-  #"epochs": epoch,
-  "batch_size": batchsize,
-    "autoencoder": autoencoder
-})
-
-wandb.config.update({"learning_rate": lr, "PC: ": 2})
+if weights_and_biases:
+    wandb.init(project="TCN new Metric", entity="mfrei")
+    wandb.init(config={
+        "learning_rate": lr,
+        "batch_size": batchsize,
+        "autoencoder": autoencoder
+    })
+    wandb.config.update({"learning_rate": lr, "PC: ": 2})
 
 
 def print_json():
@@ -188,13 +193,6 @@ def new_split():
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batchsize, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batchsize, shuffle=True)
 """
-
-if count_flops: #Does not work on the Jetson Nano yet. The amount of FLOPs doesn't depend on the architecture. Measuring FLOPs on the PC and JetsonNano would result in the same outcome.
-    # The paranoid switch prevents the FLOPs count
-    # Solution: sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
-    # Needs to be done after every restart of the PC
-    from ptflops import get_model_complexity_info
-    from pypapi import events, papi_high as high
 
 
 def str_to_number(label):
@@ -330,14 +328,18 @@ def grad_postprocessing(grad):
 
 
 def train_epoch(s, pretraining):
-    #new_split() #new random dist between train and val
-    loss_grad_total = 0
+    #Initializaion of a bunch of variables
+    global data_send_per_epoch, data_recieved_per_epoch, data_send_per_epoch_total, data_recieved_per_epoch_total
+    data_send_per_epoch, data_recieved_per_epoch = 0, 0
+    correct_train, total_train, train_loss, loss_grad_total = 0, 0, 0, 0
+    batches_aborted, total_train_nr, total_val_nr, total_test_nr = 0, 0, 0, 0
+    hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc_train = 0, 0, 0, 0, 0
     global epoch
     epoch += 1
     flops_forward_epoch, flops_encoder_epoch, flops_backprop_epoch, flops_rest, flops_send = 0,0,0,0,0
+    acc, f1, auc = 0,0,0
     #Specify AE configuration
-    train_active = 0 #default: AE is pretrained
-    train_grad_active = 0
+    train_active, train_grad_active = 0, 0 #default: AE is pretrained
     if epoch < deactivate_train_after_num_epochs:
         if autoencoder_train:
             train_active = 1
@@ -345,24 +347,19 @@ def train_epoch(s, pretraining):
         if train_gradAE_active:
             train_grad_active = 1
 
-    global data_send_per_epoch, data_recieved_per_epoch, data_send_per_epoch_total, data_recieved_per_epoch_total
-    data_send_per_epoch, data_recieved_per_epoch = 0, 0
-    correct_train, total_train, train_loss = 0, 0, 0
-    batches_aborted, total_train_nr, total_val_nr, total_test_nr = 0, 0, 0, 0
-    hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc_train = 0, 0, 0, 0, 0
-    #encoder_grad_server = 0
 
     epoch_start_time = time.time()
 
     loader = pretrain_loader if pretraining else train_loader
 
+    Communication.reset_tracker()#Resets all communication trackers (MBs send/recieved...)
+
+    test_accuracy = Accuracy(num_classes=5, average=average_setting)
+    test_f1 = F1Score(num_classes=5, average=average_setting)
+    test_auc = AUROC(num_classes=5, average=average_setting)
+
     for b, batch in enumerate(loader):
-        if count_flops:
-            x = high.read_counters()
-        #print("batch: ", b)
-        # print("FLOPs dataloader: ", x)
-        # if b % 100 == 0:
-        # print("batch ", b, " / ", total_batch)
+        flops_counter.read_counter("") #Reset FLOPs counter
 
         forward_time = time.time()
         active_training_time_batch_client = 0
@@ -370,48 +367,36 @@ def train_epoch(s, pretraining):
 
         # define labels and data per batch
         x_train, label_train = batch
-        x_train = x_train.to(device)
-        # x_train = x_train.to(device)
-        label_train = label_train.double().to(device)
+        x_train = x_train.to(device) #Place data on GPU
+        label_train = label_train.double().to(device) #Convert Labels to DouleTensors, to fit the model
 
-        if len(x_train) != 64:
+        if len(x_train) != 64: #Sorts out batches with less than 64 samples
             break
 
-        if count_flops:
-            x = high.read_counters()
-            flops_rest += x[0] # reset Flop Counter
-        optimizer.zero_grad()  # sets gradients to 0 - start for backprop later
+        flops_counter.read_counter("rest")
 
+        optimizer.zero_grad()  # sets gradients to 0 - start for backprop later
         client_output_backprop = client(x_train)
         client_output_train = client_output_backprop.detach().clone()
 
-        if count_flops:
-            x = high.read_counters()
-            #print("FLOPs forward: ", x)
-            flops_forward_epoch += x[0]
+        flops_counter.read_counter("forward") #Tracks forward propagation FLOPs
 
-        client_output_train_without_ae_send = 0
+        client_output_train_not_encoded = 0
         if autoencoder:
-            if train_active:
+            if train_active: #Only relevant if the AE is trained simultainiously to the actual model
                 optimizerencode.zero_grad()
-            # client_output_train_without_ae = client_output_train.clone().detach().requires_grad_(False)
-            client_encoded = encode(client_output_train)
+                client_output_train_not_encoded = client_output_send.detach().clone()
+            client_encoded = encode(client_output_send) #Forward propagation encoder
             client_output_send = client_encoded.detach().clone()
-            if train_active:
-                client_output_train_without_ae_send = client_output_train.detach().clone()
-        else:
-            client_output_send = client_output_train.detach().clone()
-        # client_output_send = encode(client_output_train)
 
-        if count_flops:
-            x = high.read_counters()
-            flops_encoder_epoch += x[0]
+        flops_counter.read_counter("encoder") #Tracks encoder FLOPs
 
 
         global encoder_grad_server
+        #Creates a message to the Server, containing model output and training information
         msg = {
             'client_output_train': client_output_send,
-            'client_output_train_without_ae': client_output_train_without_ae_send,
+            'client_output_train_without_ae': client_output_train_not_encoded,
             'label_train': label_train,  # concat_labels,
             'batch_concat': batch_concat,
             'batchsize': batchsize,
@@ -421,27 +406,23 @@ def train_epoch(s, pretraining):
             'grad_encode': grad_encode
         }
         active_training_time_batch_client += time.time() - start_time_batch_forward
-        if detailed_output:
-            print("Send the message to server")
-        send_msg(s, 0, msg)
+        Communication.send_msg(s, 0, msg) #Send message to server
+        flops_counter.read_counter("send") #Tracks FLOPs needed to send the message
+        msg = Communication.recieve_msg(s) #Recieve message from server
 
-
-        # while concat_counter_recv < concat_counter_send:
-        msg = recieve_msg(s)
-        # print("msg: ", msg)
         if pretraining == 0:
-            wandb.log({"dropout_threshold": msg["dropout_threshold"]}, commit=False)
+            if weights_and_biases:
+                wandb.log({"dropout_threshold": msg["dropout_threshold"]}, commit=False)
 
         # decode grad:
         client_grad_without_encode = msg["client_grad_without_encode"]
         client_grad = msg["grad_client"]
-
+        flops_counter.read_counter("recieve") #Tracks FLOPs needed to recieve the message
         global scaler
         scaler = msg["scaler"]
+        encoder_grad_server = 0
         if msg["grad_encode"]:
-            if train_grad_active:
-                # print("train_active")
-                optimizer_grad_decoder.zero_grad()
+            if train_grad_active: optimizer_grad_decoder.zero_grad()
             client_grad = Variable(client_grad, requires_grad=True)
             client_grad_decode = grad_decoder(client_grad)
             if train_grad_active:
@@ -450,111 +431,66 @@ def train_epoch(s, pretraining):
                 loss_grad_autoencoder.backward()
                 encoder_grad_server = client_grad.grad.detach().clone()#
                 optimizer_grad_decoder.step()
-                # print("loss_grad_autoencoder: ", loss_grad_autoencoder)
-            else:
-                encoder_grad_server = 0
             client_grad_decode = grad_postprocessing(client_grad_decode.detach().clone().cpu())
         else:
             if msg["client_grad_abort"] == 0:
                 client_grad_decode = client_grad.detach().clone()
-            #else:
-            #    client_grad = "abort"
-            encoder_grad_server = 0
 
         start_time_batch_backward = time.time()
 
         encoder_grad = msg["encoder_grad"]
-        if client_grad == "abort":
-            # print("client_grad: ", client_grad)
-            train_loss_add, add_correct_train, add_total_train = msg["train_loss"], msg["add_correct_train"], \
-                                                                 msg["add_total_train"]
-            correct_train += add_correct_train
-            total_train_nr += 1
-            total_train += add_total_train
-            train_loss += train_loss_add
+        if client_grad == "abort": #If the client update got aborted
             batches_aborted += 1
-
-            output_train = msg["output_train"]
-            # print("train_loss: ", train_loss/total_train_nr)
-            # meter.update(output_train, label_train, train_loss/total_train_nr)
-            pass
         else:
             if train_active:
-                client_encoded.backward(encoder_grad)
+                encoder_grad = msg["encoder_grad"]
+                client_encoded.backward(encoder_grad) #Backpropagation autoencoder
                 optimizerencode.step()
-
-            # concat_tensors[concat_counter_recv].to(device)
-            # concat_tensors[concat_counter_recv].backward(client_grad)
-            # client_output_backprob.to(device)
-            # if b % 1000 == 999:
-            #    print("Backprop with: ", client_grad)
-            if count_flops:
-                x = high.read_counters() # reset counter
-                flops_rest += x[0]
-                flops_send += x[0]
-
-            client_output_backprop.backward(client_grad_decode)
+            flops_counter.read_counter("rest")
+            client_output_backprop.backward(client_grad_decode) #Backpropagation
             optimizer.step()
-
-            if count_flops:
-                x = high.read_counters()
-                # print("FLOPs backprob: ", x)
-                flops_backprop_epoch += x[0]
-
-            train_loss_add, add_correct_train, add_total_train = msg["train_loss"], msg["add_correct_train"], \
-                                                                 msg["add_total_train"]
-
-            correct_train += add_correct_train
-            total_train_nr += 1
-            total_train += add_total_train
-            train_loss += train_loss_add
-
-            output_train = msg["output_train"]
-            # print("train_loss: ", train_loss/total_train_nr)
-            # meter.update(output_train, label_train, train_loss/total_train_nr)
-
-        # wandb.watch(client, log_freq=100)
-        output = torch.round(output_train)
-        # if np.sum(label.cpu().detach().numpy()[0]) > 1:
-        #    if np.sum(output.cpu().detach().numpy()[0] > 1):
-        #        print("output[0]: ", output.cpu().detach().numpy()[0])
-        #        print("label [0]: ", label.cpu().detach().numpy()[0])
-        #if (total_train_nr % 100 == 0):
-        #    print("output[0]: ", output.cpu().detach().numpy()[0])
-        #    print("label [0]: ", label_train.cpu().detach().numpy()[0])
-
-        #global batches_abort_rate_total
-        #batches_abort_rate_total.append(batches_aborted / total_train_nr)
-
+            flops_counter.read_counter("backprop")  
 
         active_training_time_batch_client += time.time() - start_time_batch_backward
-        #active_training_time_batch_server = msg["active_trtime_batch_server"]
-        #active_training_time_epoch_client += active_training_time_batch_client
-        #active_training_time_epoch_server += active_training_time_batch_server
-        #
+
+        #Evaluation of the current batch    
+        total_train_nr += 1
+        train_loss += msg["train_loss"]
+        output_train = msg["output_train"]
+
+        active_training_time_batch_client += time.time() - start_time_batch_backward
+
+        #Evaluation of the current batch
+        acc +=test_accuracy(output_train.detach().clone().cpu(), label_train.detach().clone().cpu().int()).numpy()
+        f1 += test_f1(output_train.detach().clone().cpu(), label_train.detach().clone().cpu().int()).numpy()
+        auc += test_auc(output_train.detach().clone().cpu(), label_train.detach().clone().cpu().int()).numpy()
+
+        output = torch.round(output_train)
         try:
-            roc_auc = roc_auc_score(label_train.detach().clone().cpu(), torch.round(output).detach().clone().cpu(),average='micro')
+            roc_auc = roc_auc_score(label_train.detach().clone().cpu(), torch.round(output).detach().clone().cpu(), average='micro')
             auc_train += roc_auc
         except:
-            # print("auc_train_exception: ")
-            # print("label: ", label)
-            # print("output: ", output)
             pass
-
-        hamming_epoch += Metrics.Accuracy(label_train.detach().clone().cpu(), torch.round(output).detach().clone().cpu())
-        # accuracy_score(label_train.detach().clone().cpu(), torch.round(output).detach().clone().cpu())
+        hamming_epoch += Metrics.Accuracy(label_train.detach().clone().cpu(), output.detach().clone().cpu())
         precision_epoch += precision_score(label_train.detach().clone().cpu(),
-                                           torch.round(output).detach().clone().cpu(),
-                                           average='micro', zero_division=0)
-        # recall_epoch += Plots.Recall(label_train.detach().clone().cpu(), output.detach().clone().cpu()).item()
-        recall_epoch += recall_score(label_train.detach().clone().cpu(), torch.round(output).detach().clone().cpu(),
-                                     average='micro', zero_division=0)
-        # f1_epoch += Plots.F1Measure(label_train.detach().clone().cpu(), output.detach().clone().cpu()).item()
-        f1_epoch += f1_score(label_train.detach().clone().cpu(), torch.round(output).detach().clone().cpu(),
-                             average='micro', zero_division=0)
+                                           output.detach().clone().cpu(), average='micro', zero_division=0)
+        recall_epoch += recall_score(label_train.detach().clone().cpu(), output.detach().clone().cpu(), average='micro')
+        f1_epoch += f1_score(label_train.detach().clone().cpu(), output.detach().clone().cpu(), average='micro')
 
+    #Evaluation of Epoch
     epoch_endtime = time.time() - epoch_start_time
+    epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc_train, total_train_nr, train_loss, batches_aborted, epoch_endtime, test_auc, test_accuracy, test_f1, pretraining)
 
+    #Communication with server
+    if not pretraining:
+        Communication.send_msg(s, 2, client.state_dict()) #Share weights with the server
+        Communication.send_msg(s, 3, 0) #Communicate that the current training epoch is finished
+
+
+def epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc_train, total_train_nr, train_loss, batches_aborted, epoch_endtime, test_auc, test_accuracy, test_f1, pretraining):
+    """
+        Evaluation function for the current training epoch
+    """
     if pretraining:
         status_epoch_train = "epoch: {}, AUC_train: {:.4f}, Accuracy: {:.4f}, Precision: {:.4f}, Recall: {:.4f}, F1: {:.4f}, trainingtime for epoch: {:.6f}s, batches abortrate:{:.2f}, train_loss: {:.4f}  ".format(
             epoch, auc_train / total_train_nr, hamming_epoch / total_train_nr, precision_epoch / total_train_nr,
@@ -564,48 +500,48 @@ def train_epoch(s, pretraining):
         print("status_epoch_pretrain: ", status_epoch_train)
 
     else:
-        flops_client_forward_total.append(flops_forward_epoch)
-        flops_client_encoder_total.append(flops_encoder_epoch)
-        flops_client_backprop_total.append(flops_backprop_epoch)
+        epoch_auc = test_auc.compute()
+        epoch_accuracy = test_accuracy.compute()
+        epoch_f1 = test_f1.compute()
+        status_train = "auc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}".format(epoch_auc, epoch_accuracy, epoch_f1)
+        print("status_train_new: ", status_train)
 
-        print("data_send_per_epoch: ", data_send_per_epoch / 1000000, " MegaBytes")
-        print("data_recieved_per_epoch: ", data_recieved_per_epoch / 1000000, "MegaBytes")
-        data_send_per_epoch_total.append(data_send_per_epoch)
-        data_recieved_per_epoch_total.append(data_recieved_per_epoch)
+        flops_client_forward_total.append(flops_counter.flops_forward_epoch)
+        flops_client_encoder_total.append(flops_counter.flops_encoder_epoch)
+        flops_client_backprop_total.append(flops_counter.flops_backprop_epoch)
+        flops_client_send_total.append(flops_counter.flops_send)
+        flops_client_recieve_total.append(flops_counter.flops_recieve)
+        flops_client_rest_total.append(flops_counter.flops_rest)
 
-        status_epoch_train = "epoch: {}, AUC_train: {:.4f}, Accuracy: {:.4f}, Precision: {:.4f}, Recall: {:.4f}, F1: {:.4f}, trainingtime for epoch: {:.6f}s, batches abortrate:{:.2f}, train_loss: {:.4f}  ".format(
+        print("data_send_per_epoch: ", Communication.get_data_send_per_epoch() / 1000000, " MegaBytes")
+        print("data_recieved_per_epoch: ", Communication.get_data_recieved_per_epoch() / 1000000, "MegaBytes")
+        data_send_per_epoch_total.append(Communication.get_data_send_per_epoch())
+        data_recieved_per_epoch_total.append(Communication.get_data_recieved_per_epoch())
+
+        status_epoch_train = "epoch: {}, AUC_train: {:.4f}, Accuracy_micro: {:.4f}, Precision: {:.4f}, Recall: {:.4f}, F1: {:.4f}, trainingtime for epoch: {:.6f}s, batches abortrate:{:.2f}, train_loss: {:.4f}  ".format(
             epoch, auc_train / total_train_nr, hamming_epoch / total_train_nr, precision_epoch / total_train_nr,
-                   recall_epoch / total_train_nr,
-                   f1_epoch / total_train_nr, epoch_endtime, batches_aborted / total_train_nr,
-                   train_loss / total_train_nr)
+            recall_epoch / total_train_nr,
+            f1_epoch / total_train_nr, epoch_endtime, batches_aborted / total_train_nr, train_loss / total_train_nr)
         print("status_epoch_train: ", status_epoch_train)
         if count_flops:
-            print("MegaFLOPS_forward_epoch", flops_forward_epoch / 1000000)
-            print("MegaFLOPS_encoder_epoch", flops_encoder_epoch / 1000000)
-            print("MegaFLOPS_backprop_epoch", flops_backprop_epoch / 1000000)
-            print("MegaFLOPS_rest", flops_rest / 1000000)
-            print("MegaFLOPS_send", flops_send / 1000000)
+            print("MegaFLOPS_forward_epoch", flops_counter.flops_forward_epoch/1000000)
+            print("MegaFLOPS_encoder_epoch", flops_counter.flops_encoder_epoch/1000000)
+            print("MegaFLOPS_backprop_epoch", flops_counter.flops_backprop_epoch/1000000)
+            print("MegaFLOPS_rest", flops_counter.flops_rest/1000000)
+            print("MegaFLOPS_send", flops_counter.flops_send/1000000)
+            print("MegaFLOPS_recieve", flops_counter.flops_recieve/1000000)
 
-        wandb.log({"Batches Abortrate": batches_aborted / total_train_nr,
-                   "MegaFLOPS Client Encoder": flops_encoder_epoch / 1000000,
-                   "MegaFLOPS Client Forward": flops_forward_epoch / 1000000,
-                   "MegaFLOPS Client Backprop": flops_backprop_epoch / 1000000},
-                  commit=False)
+        if weights_and_biases and count_flops:
+            wandb.log({"Batches Abortrate": batches_aborted / total_train_nr, "MegaFLOPS Client Encoder": flops_counter.flops_encoder_epoch/1000000,
+            "MegaFLOPS Client Forward": flops_counter.flops_forward_epoch / 1000000,
+            "MegaFLOPS Client Backprop": flops_counter.flops_backprop_epoch / 1000000, "MegaFLOPS Send": flops_counter.flops_send / 1000000,
+            "MegaFLOPS Recieve": flops_counter.flops_recieve / 1000000},
+            commit=False)
 
-        global auc_train_log
-        auc_train_log = auc_train / total_train_nr
-        global accuracy_train_log
-        accuracy_train_log = hamming_epoch / total_train_nr
-        global batches_abort_rate_total
+        global auc_train_log, accuracy_train_log, batches_abort_rate_total
+        auc_train_log = epoch_auc
+        accuracy_train_log = epoch_accuracy
         batches_abort_rate_total.append(batches_aborted / total_train_nr)
-
-        initial_weights = client.state_dict()
-        send_msg(s, 2, initial_weights)
-
-        msg = 0
-
-        send_msg(s, 3, msg)
-
 
 def val_stage(s, pretraining=0):
     total_val_nr, val_loss_total, correct_val, total_val = 0, 0, 0, 0
@@ -673,7 +609,7 @@ def val_stage(s, pretraining=0):
         f1_epoch / total_val_nr, val_loss_total / total_val_nr)
     print("status_epoch_val: ", status_epoch_val)
 
-    if pretraining == 0:
+    if pretraining == 0 and weights_and_biases:
         wandb.log({"Loss_val": val_loss_total / total_val_nr,
                    "Accuracy_val_micro": hamming_epoch / total_val_nr,
                    "F1_val": f1_epoch / total_val_nr,
@@ -773,10 +709,11 @@ def test_stage(s, epoch):
     print("Average data transfer/epoch: ", data_transfer_per_epoch / epoch / 1000000, " MB")
     print("Average dismissal rate: ", average_dismissal_rate / epoch)
 
-    wandb.config.update({"Average data transfer/epoch (MB): ": data_transfer_per_epoch / epoch / 1000000,
-                         "Average dismissal rate: ": average_dismissal_rate / epoch,
-                         "total_MegaFLOPS_forward": total_flops_forward/1000000, "total_MegaFLOPS_encoder": total_flops_encoder/1000000,
-                         "total_MegaFLOPS_backprob": total_flops_backprob/1000000, "total_MegaFLOPS": total_flops/1000000})
+    if weights_and_biases:
+        wandb.config.update({"Average data transfer/epoch (MB): ": data_transfer_per_epoch / epoch / 1000000,
+                            "Average dismissal rate: ": average_dismissal_rate / epoch,
+                            "total_MegaFLOPS_forward": total_flops_forward/1000000, "total_MegaFLOPS_encoder": total_flops_encoder/1000000,
+                            "total_MegaFLOPS_backprob": total_flops_backprob/1000000, "total_MegaFLOPS": total_flops/1000000})
 
     msg = 0
     send_msg(s, 3, msg)
@@ -986,6 +923,9 @@ def main():
     label_sttc, label_hyp, label_mi, label_norm, label_cd = [],[],[],[],[]
     global X_train, X_val, y_val, y_train, y_test, X_test
 
+    global flops_counter
+    flops_counter = Flops.Flops(count_flops)
+
     initIID()
     init_nonIID()
 
@@ -994,8 +934,8 @@ def main():
         # Starts internal FLOPs counter | If there is an Error: See "from pypapi import events"
         high.start_counters([events.PAPI_FP_OPS,])
 
-    global flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total
-    flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total = [], [], []
+    global flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total
+    flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total = [], [], [], [], [], []
 
 
     #X_test = utils.apply_standardizer(X_test, standard_scaler)

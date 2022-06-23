@@ -35,6 +35,7 @@ prev_loss = 999
 diverge_tresh = 1.1
 lr_adapt = 0.5
 model = 'TCN' #Set Model to 'TCN' or 'CNN'
+save_model = 0
 
 class PTB_XL(Dataset):
     def __init__(self, stage=None):
@@ -242,19 +243,10 @@ def start_training():
     data = []
     datalist= []
     """
-    for a in range(1):
-        for b in range(64):
-            data.append(random_num())
-        datalist.append(data)
-    print(data[0])
-    print(len(datalist))
-
     phases = ['train', 'val', 'ae']
     dataloaders = {
         phase: get_dataloader(phase, batchsize) for phase in phases
     }
-    for b, batch in enumerate(AE_PTB_testdata):
-        pass
     """
 
     time_train_epoch = time.time()
@@ -331,12 +323,12 @@ def start_training():
             #3Layers same Dataset: 0.128
             #Saved 51 epochs: 0.216848
             #print("saved")
-        torch.save(encode.state_dict(), "convencoder_TCN.pth")
-            #encode2 = Encode64()
-            #encode2.load_state_dict(torch.load("./convencoder_medical.pth"))
-            #encode2.eval()
-        torch.save(decode.state_dict(), "convdecoder_TCN.pth")
-            #prevloss = loss_test
+        if model == 'TCN' and save_model == 1:
+            torch.save(encode.state_dict(), "convencoder_TCN.pth")
+            torch.save(decode.state_dict(), "convdecoder_TCN.pth")
+        if model == 'CNN' and save_model == 1:
+            torch.save(encode.state_dict(), "../client/convencoder_medical.pth")        
+            torch.save(decode.state_dict(), "../server/convdecoder_medical.pth")
 
     print("total time:", time.time()-total_time)
 
