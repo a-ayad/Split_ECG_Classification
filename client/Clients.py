@@ -213,87 +213,17 @@ def str_to_number(label):
     return a
 
 
-#send/recieve system:
-def send_msg(sock, getid, content):
-    """
-    pickles the content (creates bitstream), adds header and send message via tcp port
-
-    :param sock: socket
-    :param content: content to send via tcp port
-    """
-    msg = [getid, content]  # add getid
-    msg = pickle.dumps(msg)
-    msg = struct.pack('>I', len(msg)) + msg  # add 4-byte length in network byte order
-    #print("communication overhead send: ", sys.getsizeof(msg), " bytes")
-    global data_send_per_epoch
-    data_send_per_epoch += sys.getsizeof(msg)
-    sock.sendall(msg)
-
-
-def recieve_msg(sock):
-    """
-    recieves the meassage with helper function, umpickles the message and separates the getid from the actual massage content
-    :param sock: socket
-    """
-
-    msg = recv_msg(sock)  # receive client message from socket
-    msg = pickle.loads(msg)
-    return msg
-
-
 def recieve_request(sock):
     """
     recieves the meassage with helper function, umpickles the message and separates the getid from the actual massage content
     :param sock: socket
     """
 
-    msg = recv_msg(sock)  # receive client message from socket
+    msg = Communication.recv_msg(sock)  # receive client message from socket
     msg = pickle.loads(msg)
     getid = msg[0]
     content = msg[1]
     handle_request(sock, getid, content)
-
-
-def recv_msg(sock):
-    """
-    gets the message length (which corresponds to the first
-    4 bytes of the recieved bytestream) with the recvall function
-
-    :param sock: socket
-    :return: returns the data retrieved from the recvall function
-    """
-    # read message length and unpack it into an integer
-    raw_msglen = recvall(sock, 4)
-    if not raw_msglen:
-        return None
-    msglen = struct.unpack('>I', raw_msglen)[0]
-
-    #print("Message length:", msglen)
-    global data_recieved_per_epoch
-    data_recieved_per_epoch += msglen
-    # read the message data
-    return recvall(sock, msglen)
-
-
-def recvall(sock, n):
-    """
-    returns the data from a recieved bytestream, helper function
-    to receive n bytes or return None if EOF is hit
-    :param sock: socket
-    :param n: length in bytes (number of bytes)
-    :return: message
-    """
-    #
-    data = b''
-    while len(data) < n:
-        if detailed_output:
-            print("Start function sock.recv")
-        packet = sock.recv(n - len(data))
-        if not packet:
-            return None
-        data += packet
-    # print("Daten: ", data)
-    return data
 
 
 def handle_request(sock, getid, content):
@@ -544,48 +474,44 @@ def epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc
         batches_abort_rate_total.append(batches_aborted / total_train_nr)
 
 def val_stage(s, pretraining=0):
+    """
+    Validation cycle for one epoch, started by the server
+    :param s: socket
+    :param content:
+    """
     total_val_nr, val_loss_total, correct_val, total_val = 0, 0, 0, 0
     val_losses, val_accs  = [], []
     hamming_epoch, precision_epoch, recall_epoch, f1_epoch, accuracy, auc_val = 0, 0, 0, 0, 0, 0
-    val_time = time.time()
-    with torch.no_grad():
-        for b_t, batch_t in enumerate(val_loader):
+    acc, f1, auc = 0,0,0
+    val_accuracy = Accuracy(num_classes=5, average=average_setting)
+    val_f1 = F1Score(num_classes=5, average=average_setting)
+    val_auc = AUROC(num_classes=5, average=average_setting)
 
+    with torch.no_grad(): #No training involved, thus no gradient needed
+        for b_t, batch_t in enumerate(val_loader): 
             x_val, label_val = batch_t
             x_val, label_val = x_val.to(device), label_val.double().to(device)
-            optimizer.zero_grad()
+            #optimizer.zero_grad()
             output_val = client(x_val, drop=False)
-            client_output_val = output_val.clone().detach().requires_grad_(True)
             if autoencoder:
-                client_output_val = encode(client_output_val)
+                output_val = encode(output_val)
 
-            msg = {'client_output_val/test': client_output_val,
-                   'label_val/test': label_val,
-                   }
-            if detailed_output:
-                print("The msg is:", msg)
-            send_msg(s, 1, msg)
-            if detailed_output:
-                print("294: send_msg success!")
-            msg = recieve_msg(s)
-            if detailed_output:
-                print("296: recieve_msg success!")
-            correct_val_add = msg["correct_val/test"]
-            val_loss = msg["val/test_loss"]
+            msg = {'client_output_val/test': output_val,
+                   'label_val/test': label_val,}
+            Communication.send_msg(s, 1, msg)
+            msg = Communication.recieve_msg(s)
             output_val_server = msg["output_val/test_server"]
-            val_loss_total += val_loss
-            correct_val += correct_val_add
-            total_val_add = len(label_val)
-            total_val += total_val_add
+            val_loss_total += msg["val/test_loss"]
             total_val_nr += 1
+
+            acc +=val_accuracy(output_val_server.detach().clone().cpu(), label_val.detach().clone().cpu().int()).numpy()
+            f1 += val_f1(output_val_server.detach().clone().cpu(), label_val.detach().clone().cpu().int()).numpy()
+            auc += val_auc(output_val_server.detach().clone().cpu(), label_val.detach().clone().cpu().int()).numpy()
 
             try:
                 roc_auc = roc_auc_score(label_val.detach().clone().cpu(), torch.round(output_val_server).detach().clone().cpu(), average='micro')
                 auc_val += roc_auc
             except:
-                # print("auc_train_exception: ")
-                # print("label: ", label)
-                # print("output: ", output)
                 pass
 
             output_val_server = torch.round(output_val_server)
@@ -602,6 +528,9 @@ def val_stage(s, pretraining=0):
             f1_epoch += f1_score(label_val.detach().clone().cpu(), output_val_server.detach().clone().cpu(),
                                  average='micro', zero_division=0)
 
+    epoch_auc, epoch_accuracy, epoch_f1 = val_auc.compute(), val_accuracy.compute(), val_f1.compute()
+    status_train = "auc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}".format(epoch_auc, epoch_accuracy, epoch_f1)
+    print("status_val_new: ", status_train)
 
     status_epoch_val = "epoch: {},AUC_val: {:.4f} ,Accuracy: {:.4f}, Precision: {:.4f}, Recall: {:.4f}, F1: {:.4f}, val_loss: {:.4f}".format(
         epoch, auc_val / total_val_nr, hamming_epoch / total_val_nr, precision_epoch / total_val_nr,
@@ -610,13 +539,17 @@ def val_stage(s, pretraining=0):
     print("status_epoch_val: ", status_epoch_val)
 
     if pretraining == 0 and weights_and_biases:
+        wandb.define_metric("AUC_val", summary="max")
+        wandb.define_metric("Accuracy_val", summary="max")
+        #wandb.log({"AUC_val_max": epoch_auc, "Accuracy_val_max": epoch_accuracy}, commit=False)
         wandb.log({"Loss_val": val_loss_total / total_val_nr,
-                   "Accuracy_val_micro": hamming_epoch / total_val_nr,
-                   "F1_val": f1_epoch / total_val_nr,
-                   "AUC_val": auc_val / total_val_nr,
-                   "AUC_train": auc_train_log,
-                   "Accuracy_train_micro": accuracy_train_log})
-        send_msg(s, 3, 0)
+               "Accuracy_val": epoch_accuracy,
+               "F1_val": epoch_f1,
+               "AUC_val": epoch_auc,
+               "AUC_train": auc_train_log,
+               "Accuracy_train": accuracy_train_log})
+
+    Communication.send_msg(s, 3, 0)
 
 
 def test_stage(s, epoch):
@@ -631,23 +564,16 @@ def test_stage(s, epoch):
         for b_t, batch_t in enumerate(val_loader):
             x_test, label_test = batch_t
             x_test, label_test = x_test.to(device), label_test.double().to(device)
-            optimizer.zero_grad()
+            #optimizer.zero_grad()
             output_test = client(x_test, drop=False)
-            client_output_test = output_test.clone().detach().requires_grad_(True)
             if autoencoder:
-                client_output_test = encode(client_output_test)
+                output_test = encode(output_test)
 
-            msg = {'client_output_val/test': client_output_test,
+            msg = {'client_output_val/test': output_test,
                    'label_val/test': label_test,
                    }
-            if detailed_output:
-                print("The msg is:", msg)
-            send_msg(s, 1, msg)
-            if detailed_output:
-                print("294: send_msg success!")
-            msg = recieve_msg(s)
-            if detailed_output:
-                print("296: recieve_msg success!")
+            Communication.send_msg(s, 1, msg)
+            msg = Communication.recieve_msg(s)
             correct_test_add = msg["correct_val/test"]
             test_loss = msg["val/test_loss"]
             output_test_server = msg["output_val/test_server"]
@@ -716,7 +642,7 @@ def test_stage(s, epoch):
                             "total_MegaFLOPS_backprob": total_flops_backprob/1000000, "total_MegaFLOPS": total_flops/1000000})
 
     msg = 0
-    send_msg(s, 3, msg)
+    Communication.send_msg(s, 3, 0)
 
 
 def initialize_model(s, msg):
@@ -930,16 +856,9 @@ def main():
     init_nonIID()
 
     print_json()
-    if count_flops:
-        # Starts internal FLOPs counter | If there is an Error: See "from pypapi import events"
-        high.start_counters([events.PAPI_FP_OPS,])
 
     global flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total
     flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total = [], [], [], [], [], []
-
-
-    #X_test = utils.apply_standardizer(X_test, standard_scaler)
-
 
     init()
 
@@ -1034,8 +953,8 @@ def main():
             train_epoch(s, pretraining=1)
             val_stage(s, pretraining=1)
         initial_weights = client.state_dict()
-        send_msg(s, 2, initial_weights)
-        send_msg(s, 3, 0)
+        Communication.send_msg(s, 2, initial_weights)
+        Communication.send_msg(s, 3, 0)
         epoch = 0
 
     #initialize_model(s)
