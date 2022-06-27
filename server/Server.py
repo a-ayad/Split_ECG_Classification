@@ -289,7 +289,7 @@ def calc_gradients(conn, msg):
         if train_loss > update_treshold:
             update = True
     else:
-        if random_number_between_0_and_1 < dropout_mechanisms(mechanism=mech, epoch=epoch):
+        if random_number_between_0_and_1 < update_mchanism(epoch=epoch, loss = train_loss): #dropout_mechanisms(mechanism=mech, epoch=epoch):
             update = True
     if update:
         if grad_encode:
@@ -331,6 +331,28 @@ def calc_gradients(conn, msg):
     # print("socket", conn)
     # print("msg: ", msg["train_loss"])
     send_msg(conn, msg)
+
+
+def update_mchanism(loss, epoch):
+    def sigmoid(x):
+        return 1 / (1 + np.exp(-x))
+    a = sigmoid((-epoch + num_epochs/2) / 3)
+    #
+    global prevloss_total, batches_total, average_loss_previous_epoch, lastepoch
+
+    if epoch > lastepoch and epoch > 0:
+        average_loss_previous_epoch = prevloss_total / batches_total
+        prevloss_total = 0
+        batches_total = 0
+    
+    lastepoch = epoch
+    prevloss_total += loss
+    batches_total += 1
+
+    if loss < average_loss_previous_epoch:
+        return 1
+    else:
+        return 0
 
 
 def epoch_is_finished(conn, msg):
@@ -418,6 +440,11 @@ def main():
     global grad_available, epoch_finished, device
     grad_available, epoch_finished = 0, 0
 
+    ###
+    global prevloss_total, batches_total, average_loss_previous_epoch, lastepoch
+    prevloss_total, batches_total, average_loss_previous_epoch, lastepoch = 0, 0, 999, 0
+    ###
+
     print(torch.version.cuda)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     if (torch.cuda.is_available()):
@@ -488,7 +515,7 @@ def main():
         #initialize_client(connectedclients[0])
         clientHandler(conn, addr)
 
-    for i in range(1):
+    for i in range(5):
         conn, addr = s.accept()
         connectedclients.append(conn)
         print('Conntected with', addr)

@@ -28,41 +28,38 @@ import os.path
 import utils
 import Models
 import Flops
+import wandb
 import Communication
 from torchmetrics.classification import Accuracy, F1Score, AUROC
 #np.set_printoptions(threshold=np.inf)
 cwd = os.path.dirname(os.path.abspath(__file__))
-mlb_path = os.path.join(cwd, "..","Benchmark", "output", "mlb.pkl")
-scaler_path = os.path.join(cwd, "..","Benchmark", "output", "standard_scaler.pkl")
-ptb_path = os.path.join(cwd, "..", "server", "../server/PTB-XL", "ptb-xl/")
+mlb_path = os.path.join(cwd, "mlb.pkl")
+scaler_path = os.path.join(cwd)
+ptb_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/")
+output_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1", "output/")
+model = 'TCN'
 
-import wandb
-
-wandb.init(project="non-IID,clean", entity="split-learning-medical")
-client_num = 1
-num_classes = 2
+client_num = 2
+num_classes = 1
 pretrain_this_client = 0
 simultrain_this_client = 0
 pretrain_epochs = 50
 IID = 0
 average_setting = 'micro'
-weights_and_biases = 1
+weights_and_biases = 0
 
-f = open('parameter_client.json', )
+f = open('client/parameter_client.json', )
 data = json.load(f)
 
 # set parameters fron json file
 #epoch = data["training_epochs"]
 lr = data["learningrate"]
 batchsize = data["batchsize"]
-batch_concat = data["batch_concat"]
 host = data["host"]
 port = data["port"]
 max_recv = data["max_recv"]
 autoencoder = data["autoencoder"]
-detailed_output = data["detailed_output"]
 count_flops = data["count_flops"]
-plots = data["plots"]
 autoencoder_train = data["autoencoder_train"]
 deactivate_train_after_num_epochs = data["deactivate_train_after_num_epochs"]
 grad_encode = data["grad_encode"]
@@ -89,9 +86,7 @@ def print_json():
     print("Getting the metadata port: ", port)
     print("Getting the metadata batchsize: ", batchsize)
     print("Autoencoder: ", autoencoder)
-    print("detailed_output: ", detailed_output)
     print("count_flops: ", count_flops)
-    print("plots: ", plots)
     print("autoencoder_train: ", autoencoder_train)
     print("deactivate_train_after_num_epochs: ", deactivate_train_after_num_epochs)
 
@@ -328,7 +323,6 @@ def train_epoch(s, pretraining):
             'client_output_train': client_output_send,
             'client_output_train_without_ae': client_output_train_not_encoded,
             'label_train': label_train,  # concat_labels,
-            'batch_concat': batch_concat,
             'batchsize': batchsize,
             'train_active': train_active,
             'encoder_grad_server': encoder_grad_server,
@@ -669,35 +663,30 @@ def initIID():
     sampling_frequency = 100
     datafolder = ptb_path
     task = 'superdiagnostic'
-    outputfolder = mlb_path
 
     # Load PTB-XL data
     data, raw_labels = utils.load_dataset(datafolder, sampling_frequency)
     # Preprocess label data
     labels = utils.compute_label_aggregations(raw_labels, datafolder, task)
     # Select relevant data and convert to one-hot
-    data, labels, Y, _ = utils.select_data(data, labels, task, min_samples=0, outputfolder=outputfolder)
+    data, labels, Y, _ = utils.select_data(data, labels, task, min_samples=0, outputfolder=mlb_path)
     input_shape = data[0].shape
     print(input_shape)
 
     # 1-9 for training
     X_train = data[labels.strat_fold < 10]
+    global y_train
     y_train = Y[labels.strat_fold < 10]
     # 10 for validation
     X_val = data[labels.strat_fold == 10]
     y_val = Y[labels.strat_fold == 10]
 
-    # X_test = data[labels.strat_fold == 10]
-    # y_test = Y[labels.strat_fold == 10]
-
     num_classes = 5  # <=== number of classes in the finetuning dataset
     input_shape = [1000, 12]  # <=== shape of samples, [None, 12] in case of different lengths
 
-    print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)  # , X_test.shape, y_test.shape)
+    print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)
 
-    import pickle
-
-    standard_scaler = pickle.load(open(scaler_path, "rb"))
+    standard_scaler = pickle.load(open(scaler_path + '/standard_scaler.pkl', "rb"))
 
     X_train = utils.apply_standardizer(X_train, standard_scaler)
     X_val = utils.apply_standardizer(X_val, standard_scaler)

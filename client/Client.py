@@ -27,7 +27,6 @@ warnings.simplefilter("ignore", UserWarning)
 from torchmetrics.classification import Accuracy, F1Score, AUROC
 # Set path variables to load the PTB-XL dataset and its scaler 
 cwd = os.path.dirname(os.path.abspath(__file__))
-cwd = os.path.dirname(cwd)
 mlb_path = os.path.join(cwd, "mlb.pkl")
 scaler_path = os.path.join(cwd)
 ptb_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/")
@@ -50,7 +49,7 @@ deactivate_train_after_num_epochs = data["deactivate_train_after_num_epochs"]
 grad_encode = data["grad_encode"]
 train_gradAE_active = data["train_gradAE_active"]
 deactivate_grad_train_after_num_epochs = data["deactivate_grad_train_after_num_epochs"]
-weights_and_biases = 0
+weights_and_biases = 1
 average_setting = 'micro'
 
 # Synchronisation with Weights&Biases
@@ -572,27 +571,11 @@ def count_flops_client():
         encoder_flops_forward, params = thop.profile(encode, inputs=(torch.rand(batchsize, 192, 1000).double().to(device),))
         print("Client MegaFLOPs encoder: ", encoder_flops_forward/1000000)
 
-
-
-
-def main():
-    """
-    initialize dataset, device, client model, optimizer, loss and decoder and starts the training process
-    """
-    print_json() #Print parameters
-
-    # Initialize Dataset
-    global flops_counter
-    flops_counter = Flops.Flops(count_flops)
-
-    global flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total
-    flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total = 0,0,0,0,0,0
-
+def load_dataset():
     global X_train, X_val, y_val, y_train, y_test, X_test
     sampling_frequency = 100
     datafolder = ptb_path
     task = 'superdiagnostic'
-    outputfolder = output_path
 
     # Load PTB-XL data
     data, raw_labels = utils.load_dataset(datafolder, sampling_frequency)
@@ -623,13 +606,25 @@ def main():
     #X_test = utils.apply_standardizer(X_test, standard_scaler)
 
 
+def main():
+    """
+    initialize dataset, device, client model, optimizer, loss and decoder and starts the training process
+    """
+    print_json() #Print parameters
+
+    # Initialize Dataset
+    global flops_counter
+    flops_counter = Flops.Flops(count_flops)
+    # Initialize Flops counter
+    global flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total
+    flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total = 0,0,0,0,0,0
+
+    load_dataset()
     init() #Initialisation of the training and validation dataset
 
-    global data_send_per_epoch, data_recieved_per_epoch, encoder_grad_server, epoch
-    data_send_per_epoch, data_recieved_per_epoch, encoder_grad_server, epoch = 0, 0, 0, 0
-
-    global data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total
-    data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total = 0,0,0
+    #Initialize counter
+    global data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total, encoder_grad_server, epoch
+    data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total, encoder_grad_server, epoch = 0,0,0,0,0
 
     #Define training on GPU
     global device
