@@ -55,7 +55,7 @@ average_setting = 'micro'
 
 # Synchronisation with Weights&Biases
 if weights_and_biases:
-    wandb.init(project="TCN new Metric", entity="mfrei")
+    wandb.init(project="TCN Clean", entity="mfrei")
     wandb.init(config={
         "learning_rate": lr,
         "batch_size": batchsize,
@@ -344,17 +344,18 @@ def epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc
     status_train = "auc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}".format(epoch_auc, epoch_accuracy, epoch_f1)
     print("status_train_new: ", status_train)
 
-    flops_client_forward_total.append(flops_counter.flops_forward_epoch)
-    flops_client_encoder_total.append(flops_counter.flops_encoder_epoch)
-    flops_client_backprop_total.append(flops_counter.flops_backprop_epoch)
-    flops_client_send_total.append(flops_counter.flops_send)
-    flops_client_recieve_total.append(flops_counter.flops_recieve)
-    flops_client_rest_total.append(flops_counter.flops_rest)
+    global flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total, data_send_per_epoch_total, data_recieved_per_epoch_total
+    flops_client_forward_total += flops_counter.flops_forward_epoch
+    flops_client_encoder_total += flops_counter.flops_encoder_epoch
+    flops_client_backprop_total+=flops_counter.flops_backprop_epoch
+    flops_client_send_total+=flops_counter.flops_send
+    flops_client_recieve_total+=flops_counter.flops_recieve
+    flops_client_rest_total+=flops_counter.flops_rest
 
     print("data_send_per_epoch: ", Communication.get_data_send_per_epoch() / 1000000, " MegaBytes")
     print("data_recieved_per_epoch: ", Communication.get_data_recieved_per_epoch() / 1000000, "MegaBytes")
-    data_send_per_epoch_total.append(Communication.get_data_send_per_epoch())
-    data_recieved_per_epoch_total.append(Communication.get_data_recieved_per_epoch())
+    data_send_per_epoch_total+=Communication.get_data_send_per_epoch()
+    data_recieved_per_epoch_total+=Communication.get_data_recieved_per_epoch()
 
     status_epoch_train = "epoch: {}, AUC_train: {:.4f}, Accuracy_micro: {:.4f}, Precision: {:.4f}, Recall: {:.4f}, F1: {:.4f}, trainingtime for epoch: {:.6f}s, batches abortrate:{:.2f}, train_loss: {:.4f}  ".format(
         epoch, auc_train / total_train_nr, hamming_epoch / total_train_nr, precision_epoch / total_train_nr,
@@ -379,7 +380,7 @@ def epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc
     global auc_train_log, accuracy_train_log, batches_abort_rate_total
     auc_train_log = epoch_auc
     accuracy_train_log = epoch_accuracy
-    batches_abort_rate_total.append(batches_aborted / total_train_nr)
+    batches_abort_rate_total += batches_aborted / total_train_nr
 
 
 def val_stage(s, content):
@@ -517,41 +518,23 @@ def test_stage(s, epoch):
 
 
     global data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total
-    data_transfer_per_epoch, average_dismissal_rate, total_flops_forward, total_flops_encoder, total_flops_backprob, total_flops_send, total_flops_recieve,total_flops_rest = 0,0,0,0,0,0,0,0
-    for data in data_send_per_epoch_total: 
-        data_transfer_per_epoch += data
-    for data in data_recieved_per_epoch_total:
-        data_transfer_per_epoch += data
-    for data in batches_abort_rate_total:
-        average_dismissal_rate += data
-    for flop in flops_client_forward_total:
-        total_flops_forward += flop
-    for flop in flops_client_encoder_total:
-        total_flops_encoder += flop
-    for flop in flops_client_backprop_total:
-        total_flops_backprob += flop
-    for flop in flops_client_send_total:
-        total_flops_send += flop
-    for flop in flops_client_recieve_total:
-        total_flops_recieve += flop
-    for flop in flops_client_rest_total:
-        total_flops_rest += flop
-    total_flops_model = total_flops_backprob + total_flops_encoder + total_flops_forward
-    total_flops_all = total_flops_model+total_flops_send+total_flops_recieve+total_flops_rest
+    total_flops_model = flops_client_forward_total + flops_client_encoder_total + flops_client_backprop_total
+    total_flops_all = total_flops_model+flops_client_send_total+flops_client_recieve_total+flops_client_rest_total
+    data_transfer_per_epoch = data_send_per_epoch_total+data_recieved_per_epoch_total
     if count_flops:
-        print("total FLOPs forward: ", total_flops_forward)
-        print("total FLOPs encoder: ", total_flops_encoder)
-        print("total FLOPs backprob: ", total_flops_backprob)
+        print("total FLOPs forward: ", flops_client_forward_total)
+        print("total FLOPs encoder: ", flops_client_encoder_total)
+        print("total FLOPs backprob: ", flops_client_backprop_total)
         print("total FLOPs Model: ", total_flops_model)
         print("total FLOPs: ", total_flops_all)
     print("Average data transfer/epoch: ", data_transfer_per_epoch / epoch / 1000000, " MB")
-    print("Average dismissal rate: ", average_dismissal_rate / epoch)
+    print("Average dismissal rate: ", batches_abort_rate_total / epoch)
 
     if weights_and_biases:
         wandb.config.update({"Average data transfer/epoch (MB): ": data_transfer_per_epoch / epoch / 1000000,
-                         "Average dismissal rate: ": average_dismissal_rate / epoch,
-                         "total_MegaFLOPS_forward": total_flops_forward/1000000, "total_MegaFLOPS_encoder": total_flops_encoder/1000000,
-                         "total_MegaFLOPS_backprob": total_flops_backprob/1000000,"total_MegaFLOPS modal": total_flops_model/1000000 ,"total_MegaFLOPS": total_flops_all/1000000})
+                         "Average dismissal rate: ": batches_abort_rate_total / epoch,
+                         "total_MegaFLOPS_forward": flops_client_forward_total/1000000, "total_MegaFLOPS_encoder": flops_client_encoder_total/1000000,
+                         "total_MegaFLOPS_backprob": flops_client_backprop_total/1000000,"total_MegaFLOPS model": total_flops_model/1000000 ,"total_MegaFLOPS": total_flops_all/1000000})
 
     Communication.send_msg(s, 3, 0)
 
@@ -603,7 +586,7 @@ def main():
     flops_counter = Flops.Flops(count_flops)
 
     global flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total
-    flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total = [], [], [], [], [], []
+    flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total = 0,0,0,0,0,0
 
     global X_train, X_val, y_val, y_train, y_test, X_test
     sampling_frequency = 100
@@ -646,7 +629,7 @@ def main():
     data_send_per_epoch, data_recieved_per_epoch, encoder_grad_server, epoch = 0, 0, 0, 0
 
     global data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total
-    data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total = [], [], []
+    data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total = 0,0,0
 
     #Define training on GPU
     global device
