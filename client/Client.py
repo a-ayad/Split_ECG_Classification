@@ -3,7 +3,7 @@ import struct
 import socket
 import pickle
 import json
-from sympy import Mod
+#from sympy import Mod
 from torch.optim import SGD, Adam, AdamW
 import sys
 import time
@@ -25,7 +25,7 @@ import warnings
 import thop
 warnings.simplefilter("ignore", UserWarning)
 from torchmetrics.classification import Accuracy, F1Score, AUROC
-# Set path variables to load the PTB-XL dataset and its scaler
+# Set path variables to load the PTB-XL dataset and its scaler 
 cwd = os.path.dirname(os.path.abspath(__file__))
 cwd = os.path.dirname(cwd)
 mlb_path = os.path.join(cwd, "mlb.pkl")
@@ -50,7 +50,7 @@ deactivate_train_after_num_epochs = data["deactivate_train_after_num_epochs"]
 grad_encode = data["grad_encode"]
 train_gradAE_active = data["train_gradAE_active"]
 deactivate_grad_train_after_num_epochs = data["deactivate_grad_train_after_num_epochs"]
-weights_and_biases = 1
+weights_and_biases = 0
 average_setting = 'micro'
 
 # Synchronisation with Weights&Biases
