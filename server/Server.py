@@ -515,7 +515,7 @@ def main():
         #initialize_client(connectedclients[0])
         clientHandler(conn, addr)
 
-    for i in range(5):
+    for i in range(4):
         conn, addr = s.accept()
         connectedclients.append(conn)
         print('Conntected with', addr)

@@ -1,16 +1,12 @@
-from re import A
-import struct
 import socket
 import pickle
 import json
-#from sympy import Mod
-from torch.optim import SGD, Adam, AdamW
-import sys
+from torch.optim import Adam, AdamW
 import time
-import numpy as np # linear algebra
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from torch.autograd import Variable
 from sklearn.metrics import accuracy_score, auc, f1_score, precision_score, recall_score, roc_auc_score
 import Metrics
@@ -27,6 +23,7 @@ warnings.simplefilter("ignore", UserWarning)
 from torchmetrics.classification import Accuracy, F1Score, AUROC
 # Set path variables to load the PTB-XL dataset and its scaler 
 cwd = os.path.dirname(os.path.abspath(__file__))
+cwd = os.path.dirname(cwd)
 mlb_path = os.path.join(cwd, "mlb.pkl")
 scaler_path = os.path.join(cwd)
 ptb_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/")

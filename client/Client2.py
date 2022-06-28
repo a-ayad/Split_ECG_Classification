@@ -31,7 +31,7 @@ model = 'TCN'
 client_num = 2
 num_classes = 1
 pretrain_this_client = 0
-simultrain_this_client = 0
+simultrain_this_client = 1
 pretrain_epochs = 50
 IID = 0
 average_setting = 'micro'
@@ -541,9 +541,6 @@ def val_stage(s, pretraining=0):
 
 
 def test_stage(s, epoch):
-    global client
-    torch.cuda.empty_cache()
-    client.to('cuda:0')
     loss_test = 0.0
     correct_test, total_test = 0, 0
     hamming_epoch = 0

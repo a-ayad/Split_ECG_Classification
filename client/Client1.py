@@ -28,10 +28,10 @@ ptb_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiogra
 output_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1", "output/")
 model = 'TCN'
 
-client_num = 2
+client_num = 1
 num_classes = 1
-pretrain_this_client = 0
-simultrain_this_client = 0
+pretrain_this_client = 1
+simultrain_this_client = 1
 pretrain_epochs = 50
 IID = 0
 average_setting = 'micro'
@@ -536,8 +536,10 @@ def val_stage(s, pretraining=0):
                "AUC_train": auc_train_log,
                "Accuracy_train": accuracy_train_log})
 
-    client.to('cpu') #free up some gpu memory
-    Communication.send_msg(s, 3, 0)
+    
+    if not pretraining:
+        client.to('cpu') #free up some gpu memory
+        Communication.send_msg(s, 3, 0)
 
 
 def test_stage(s, epoch):

@@ -1,0 +1,10 @@
+sleep 2
+python /home/marian/VisualStudioCode/Split_ECG_Classification/client/Client1.py &
+sleep 1
+python /home/marian/VisualStudioCode/Split_ECG_Classification/client/Client2.py &
+sleep 1
+python /home/marian/VisualStudioCode/Split_ECG_Classification/client/Client3.py &
+sleep 1
+python /home/marian/VisualStudioCode/Split_ECG_Classification/client/Client4.py &
+sleep 1
+python /home/marian/VisualStudioCode/Split_ECG_Classification/client/Client5.py &

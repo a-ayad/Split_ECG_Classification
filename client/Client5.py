@@ -28,14 +28,14 @@ ptb_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiogra
 output_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1", "output/")
 model = 'TCN'
 
-client_num = 2
+client_num = 5
 num_classes = 1
 pretrain_this_client = 0
-simultrain_this_client = 0
+simultrain_this_client = 1
 pretrain_epochs = 50
 IID = 0
 average_setting = 'micro'
-weights_and_biases = 0
+weights_and_biases = 1
 
 f = open('client/parameter_client.json', )
 data = json.load(f)
@@ -523,7 +523,7 @@ def val_stage(s, pretraining=0):
         epoch, auc_val / total_val_nr, hamming_epoch / total_val_nr, precision_epoch / total_val_nr,
         recall_epoch / total_val_nr,
         f1_epoch / total_val_nr, val_loss_total / total_val_nr)
-    print("status_epoch_val: ", status_epoch_val)
+    #print("status_epoch_val: ", status_epoch_val)
 
     if pretraining == 0 and weights_and_biases:
         wandb.define_metric("AUC_val", summary="max")
@@ -541,9 +541,6 @@ def val_stage(s, pretraining=0):
 
 
 def test_stage(s, epoch):
-    global client
-    torch.cuda.empty_cache()
-    client.to('cuda:0')
     loss_test = 0.0
     correct_test, total_test = 0, 0
     hamming_epoch = 0
