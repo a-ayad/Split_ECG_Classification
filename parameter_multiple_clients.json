@@ -1,0 +1,39 @@
+{
+    "host": "134.130.35.106",
+    "port": 10089,
+    "max_recv": 4096,
+
+    "batchsize": 64,
+    "learningrate": 0.001, 
+    "(Comment): Learnrate for CNN": 0.0005,
+
+    "count_flops": 0,
+
+    "Model": "TCN",
+    "(Comment): For Model, TCN and CNN are viable": 0,
+    "num_classes": 2,
+
+    "autoencoder": 0,
+
+    "autoencoder_train": 0,
+    "grad_encode": 0,
+    "train_gradAE_active": 0,
+    "deactivate_train_after_num_epochs": 20,
+    "deactivate_grad_train_after_num_epochs": 20,
+
+
+
+    "(Comment):Parameter Server Json": 0,
+
+    "nr_clients": 1,
+    
+    "epochs": 30,
+
+    "update_mechanism": "static",
+    "update_mechanism: static to use the update_threshold without a mechanism": 0,
+    "update_threshold": 0,
+    "mechanism": "sigmoid",
+    
+    "pretrain_active": 0
+}
+

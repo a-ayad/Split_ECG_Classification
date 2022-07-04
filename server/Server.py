@@ -1,7 +1,7 @@
 import socket
 import struct
 import pickle
-from MeCab import Model
+#from MeCab import Model
 import numpy as np
 import json
 import torch
@@ -19,7 +19,8 @@ import os
 import ModelsServer
 
 # load data from json file
-f = open('server/parameter_server.json', )
+#f = open('server/parameter_server.json', )
+f = open('parameter_multiple_clients.json', )
 data = json.load(f)
 
 # set parameters fron json file
@@ -28,7 +29,7 @@ port = data["port"]
 max_recv = data["max_recv"]
 lr = data["learningrate"]
 update_treshold = data["update_threshold"]
-max_numclients = data["max_nr_clients"]
+numclients = data["nr_clients"]
 autoencoder = data["autoencoder"]
 #autoencoder_train = data["autoencoder_train"]
 num_epochs = data["epochs"]
@@ -40,7 +41,7 @@ data_send_per_epoch = 0
 client_weights = 0
 client_weights_available = 0
 autoencoder_train = 0
-model = 'TCN'
+model = data["Model"]
 
 
 def send_msg(sock, content):
@@ -491,21 +492,21 @@ def main():
         global optimizerdecode
         optimizerdecode = Adam(decode.parameters(), lr=0.0001)
 
-    global grad_encoder
-    grad_encoder = ModelsServer.Grad_Encoder()
-    #grad_encoder.load_state_dict(torch.load("./grad_encoder_medical.pth"))
-    grad_encoder.double().to(device)
-    print("Grad encoder model loaded")
+    #global grad_encoder
+    #grad_encoder = ModelsServer.Grad_Encoder()
+    ##grad_encoder.load_state_dict(torch.load("./grad_encoder_medical.pth"))
+    #grad_encoder.double().to(device)
+    #print("Grad encoder model loaded")
 
-    global optimizer_grad_encoder
-    optimizer_grad_encoder = Adam(grad_encoder.parameters(), lr=lr)
+    #global optimizer_grad_encoder
+    #optimizer_grad_encoder = Adam(grad_encoder.parameters(), lr=lr)
 
     global epoch
     epoch = 0
 
     s = socket.socket()
-    s.bind((host, port))
-    s.listen(max_numclients)
+    s.bind(("0.0.0.0", port))
+    s.listen(numclients)
     print("Listen to client reply.")
 
     if pretrain_active:
@@ -515,7 +516,7 @@ def main():
         #initialize_client(connectedclients[0])
         clientHandler(conn, addr)
 
-    for i in range(4):
+    for i in range(numclients):
         conn, addr = s.accept()
         connectedclients.append(conn)
         print('Conntected with', addr)

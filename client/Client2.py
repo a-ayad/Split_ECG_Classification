@@ -26,18 +26,18 @@ mlb_path = os.path.join(cwd, "mlb.pkl")
 scaler_path = os.path.join(cwd)
 ptb_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/")
 output_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1", "output/")
-model = 'TCN'
+#model = 'TCN'
 
 client_num = 2
 num_classes = 1
 pretrain_this_client = 0
 simultrain_this_client = 1
-pretrain_epochs = 50
+pretrain_epochs = 30
 IID = 0
 average_setting = 'micro'
 weights_and_biases = 0
 
-f = open('client/parameter_client.json', )
+f = open('parameter_multiple_clients.json', )
 data = json.load(f)
 
 # set parameters fron json file
@@ -54,6 +54,8 @@ deactivate_train_after_num_epochs = data["deactivate_train_after_num_epochs"]
 grad_encode = data["grad_encode"]
 train_gradAE_active = data["train_gradAE_active"]
 deactivate_grad_train_after_num_epochs = data["deactivate_grad_train_after_num_epochs"]
+model = data["Model"]
+num_classes = data["num_classes"]
 
 if weights_and_biases:
     wandb.init(project="TCN new Metric", entity="mfrei")
@@ -128,7 +130,7 @@ class PTB_XL(Dataset):
 
 
 
-def init():
+def init_train_val_dataset():
     train_dataset = PTB_XL('train')
     val_dataset = PTB_XL('val')
     if IID:
@@ -165,37 +167,6 @@ def init():
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batchsize, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batchsize, shuffle=True)
-"""
-def new_split():
-    global train_loader
-    global val_loader
-    train_dataset, val_dataset = torch.utils.data.random_split(training_dataset,
-                                                               [size_train_dataset,
-                                                                len(training_dataset) - size_train_dataset])
-    print("train_dataset size: ", size_train_dataset)
-    print("val_dataset size: ", len(training_dataset) - size_train_dataset)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batchsize, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batchsize, shuffle=True)
-"""
-
-
-def str_to_number(label):
-    a = np.zeros(5)
-    if not label:
-        return a
-    for i in label:
-        if i == 'NORM':
-            a[0] = 1
-        if i == 'MI':
-            a[1] = 1
-        if i == 'STTC':
-            a[2] = 1
-        if i == 'HYP':
-            a[3] = 1
-        if i == 'CD':
-            a[4] = 1
-    return a
-
 
 def recieve_request(sock):
     """
@@ -419,7 +390,8 @@ def epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc
         epoch_auc = test_auc.compute()
         epoch_accuracy = test_accuracy.compute()
         epoch_f1 = test_f1.compute()
-        status_train = "auc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}".format(epoch_auc, epoch_accuracy, epoch_f1)
+        status_train = "auc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}, trainingtime for epoch: {:.6f}s, batches abortrate:{:.2f}, train_loss: {:.4f}".format(
+            epoch_auc, epoch_accuracy, epoch_f1, epoch_endtime, batches_aborted / total_train_nr, train_loss / total_train_nr)
         print("status_train_new: ", status_train)
 
         flops_client_forward_total.append(flops_counter.flops_forward_epoch)
@@ -438,7 +410,7 @@ def epoch_evaluation(hamming_epoch, precision_epoch, recall_epoch, f1_epoch, auc
             epoch, auc_train / total_train_nr, hamming_epoch / total_train_nr, precision_epoch / total_train_nr,
             recall_epoch / total_train_nr,
             f1_epoch / total_train_nr, epoch_endtime, batches_aborted / total_train_nr, train_loss / total_train_nr)
-        print("status_epoch_train: ", status_epoch_train)
+        #print("status_epoch_train: ", status_epoch_train)
         if count_flops:
             print("MegaFLOPS_forward_epoch", flops_counter.flops_forward_epoch/1000000)
             print("MegaFLOPS_encoder_epoch", flops_counter.flops_encoder_epoch/1000000)
@@ -523,7 +495,7 @@ def val_stage(s, pretraining=0):
         epoch, auc_val / total_val_nr, hamming_epoch / total_val_nr, precision_epoch / total_val_nr,
         recall_epoch / total_val_nr,
         f1_epoch / total_val_nr, val_loss_total / total_val_nr)
-    print("status_epoch_val: ", status_epoch_val)
+    #print("status_epoch_val: ", status_epoch_val)
 
     if pretraining == 0 and weights_and_biases:
         wandb.define_metric("AUC_val", summary="max")
@@ -536,11 +508,16 @@ def val_stage(s, pretraining=0):
                "AUC_train": auc_train_log,
                "Accuracy_train": accuracy_train_log})
 
-    client.to('cpu') #free up some gpu memory
-    Communication.send_msg(s, 3, 0)
+    
+    if not pretraining:
+        client.to('cpu') #free up some gpu memory
+        Communication.send_msg(s, 3, 0)
 
 
 def test_stage(s, epoch):
+    global client
+    torch.cuda.empty_cache()
+    client.to('cuda:0')
     loss_test = 0.0
     correct_test, total_test = 0, 0
     hamming_epoch = 0
@@ -639,17 +616,12 @@ def initialize_model(s, msg):
     the initial weights are fetched from the server
     :param conn:
     """
-    #msg = recieve_msg(s)
     if msg == 0:
-        #print("msg == 0")
         pass
     else:
         print("msg != 0")
         client.load_state_dict(msg, strict=False)
         print("model successfully initialized")
-    #print("start_training")
-    # start_training(s)
-    #train_epoch(s)
 
 
 def initIID():
@@ -704,26 +676,6 @@ def init_nonIID():
             norm.append(X_train[a])
         if label_class(y_train[a], 4):
             cd.append(X_train[a])
-
-    """
-    print("norm shape: ", len(norm))
-    print("mi shape: ", len(mi))
-    print("sttc shape: ", len(sttc))
-    print("hyp shape: ", len(hyp))
-    print("cd shape: ", len(cd))
-
-    print("norm label: ", label_norm[0])
-    print("mi label: ", label_mi[0])
-    print("sttc label: ", label_sttc[0])
-    print("hyp label: ", label_hyp[0])
-    print("cd label: ", label_cd[0])
-
-    print("norm label: ", len(label_norm))
-    print("mi label: ", len(label_mi))
-    print("sttc label: ", len(label_sttc))
-    print("hyp label: ", len(label_hyp))
-    print("cd label: ", len(label_cd))
-    """
 
     if client_num == 1:
         if num_classes == 1:
@@ -823,40 +775,7 @@ def label_class(label, clas):
             label_cd.append(label)
             return True
 
-
-def main():
-    """
-    initialize device, client model, optimizer, loss and decoder and starts the training process
-    """
-    global label_sttc, label_hyp, label_mi, label_norm, label_cd
-    label_sttc, label_hyp, label_mi, label_norm, label_cd = [],[],[],[],[]
-    global X_train, X_val, y_val, y_train, y_test, X_test
-
-    global flops_counter
-    flops_counter = Flops.Flops(count_flops)
-
-    initIID()
-    init_nonIID()
-
-    print_json()
-
-    global flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total
-    flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total = [], [], [], [], [], []
-
-    init()
-
-    global epoch
-    epoch = 0
-    global encoder_grad_server
-    encoder_grad_server = 0
-
-    global data_send_per_epoch_total
-    data_send_per_epoch_total = []
-    global data_recieved_per_epoch_total
-    data_recieved_per_epoch_total = []
-    global batches_abort_rate_total
-    batches_abort_rate_total = []
-
+def init_nn_parameters():
     global device
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     if (torch.cuda.is_available()):
@@ -874,26 +793,20 @@ def main():
     global client
     if model == 'TCN': client = Models.Small_TCN_5(5, 12)
     if model == 'CNN': client = Models.Client()
-    print("Start Client")
     client.double().to(device)
 
     global optimizer
     #optimizer = SGD(client.parameters(), lr=lr, momentum=0.9)
     optimizer = AdamW(client.parameters(), lr=lr)
-    print("Start Optimizer")
 
     global error
     #error = nn.CrossEntropyLoss()
     error = nn.BCELoss()
-    print("Start loss calcu")
 
     global data_send_per_epoch
     global data_recieved_per_epoch
     data_send_per_epoch = 0
     data_recieved_per_epoch = 0
-
-    #global scaler
-    #scaler = MinMaxScaler()
 
     if autoencoder:
         global encode
@@ -919,8 +832,31 @@ def main():
         global optimizer_grad_decoder
         optimizer_grad_decoder = Adam(grad_decoder.parameters(), lr=0.0001)
 
-    global error_grad_autoencoder
-    error_grad_autoencoder = nn.MSELoss()
+        global error_grad_autoencoder
+        error_grad_autoencoder = nn.MSELoss()
+
+
+def main():
+    """
+    initialize device, client model, optimizer, loss and decoder and starts the training process
+    """
+    global label_sttc, label_hyp, label_mi, label_norm, label_cd
+    label_sttc, label_hyp, label_mi, label_norm, label_cd = [],[],[],[],[]
+    global X_train, X_val, y_val, y_train, y_test, X_test
+    global flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total
+    flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total = [], [], [], [], [], []
+    global epoch, encoder_grad_server
+    epoch, encoder_grad_server = 0, 0
+    global data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total
+    data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total = [], [], []
+    global flops_counter
+    flops_counter = Flops.Flops(count_flops)
+
+    initIID()
+    init_nonIID()
+    print_json()
+    init_train_val_dataset()
+    init_nn_parameters()
 
     s = socket.socket()
     print("Start socket connect")
@@ -937,7 +873,6 @@ def main():
         Communication.send_msg(s, 3, 0)
         epoch = 0
 
-    #initialize_model(s)
     serverHandler(s)
 
 
