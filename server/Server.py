@@ -20,7 +20,7 @@ import ModelsServer
 
 # load data from json file
 #f = open('server/parameter_server.json', )
-f = open('parameter_multiple_clients.json', )
+f = open('settings.json', )
 data = json.load(f)
 
 # set parameters fron json file
@@ -31,17 +31,16 @@ lr = data["learningrate"]
 update_treshold = data["update_threshold"]
 numclients = data["nr_clients"]
 autoencoder = data["autoencoder"]
-#autoencoder_train = data["autoencoder_train"]
 num_epochs = data["epochs"]
 mech = data["mechanism"]
 pretrain_active = data["pretrain_active"]
 update_mechanism = data["update_mechanism"]
+model = data["Model"]
 
 data_send_per_epoch = 0
 client_weights = 0
 client_weights_available = 0
-autoencoder_train = 0
-model = data["Model"]
+
 
 
 def send_msg(sock, content):
@@ -235,26 +234,14 @@ def calc_gradients(conn, msg):
     global grad_available
     start_time_training = time.time()
     with torch.no_grad():
-        client_output_train, client_output_train_without_ae, label_train, batchsize, train_active, encoder_grad_server, train_grad_active, grad_encode = msg['client_output_train'], msg['client_output_train_without_ae'], msg['label_train'], msg[
-            'batchsize'], msg['train_active'], msg['encoder_grad_server'], msg['train_grad_active'], msg['grad_encode']  # client output tensor
+        client_output_train, client_output_train_without_ae, label_train, batchsize = msg['client_output_train'], msg['client_output_train_without_ae'], msg['label_train'], msg[
+            'batchsize']
         client_output_train, label_train = client_output_train.to(device), label_train
     if autoencoder:
-        if train_active:
-            #print("train_active")
-            optimizerdecode.zero_grad()
         client_output_train = Variable(client_output_train, requires_grad=True)
-        client_output_train_decode = decode(client_output_train)
-        if train_active:
-            loss_autoencoder = error_autoencoder(client_output_train_without_ae, client_output_train_decode)
-            loss_autoencoder.backward()
-            encoder_grad = client_output_train.grad.detach().clone()#
-            optimizerdecode.step()
-            #print("loss_autoencoder: ", loss_autoencoder)
-        else:
-            encoder_grad = 0
+        client_output_train_decode = decode(client_output_train)  
     else:
         client_output_train_decode = client_output_train.detach().clone()
-        encoder_grad = 0
     #client_output_train = Variable(client_output_train, requires_grad=True)
     #client_output_train_decode = decode(client_output_train)
     #encoder_grad = 0
@@ -293,33 +280,16 @@ def calc_gradients(conn, msg):
         if random_number_between_0_and_1 < update_mchanism(epoch=epoch, loss = train_loss): #dropout_mechanisms(mechanism=mech, epoch=epoch):
             update = True
     if update:
-        if grad_encode:
-            if train_grad_active:
-                optimizer_grad_encoder.zero_grad()
-            grad_encoded = grad_encoder(grad_preprocessing(client_grad.detach().clone().cpu()))
-            client_grad_send = grad_encoded.detach().clone()
-            if train_grad_active:
-                client_grad_without_encode = grad_preprocessing(client_grad.detach().clone().cpu())
-            client_grad_abort = 0
-        else:
-            client_grad_send = client_grad.detach().clone()
-            client_grad_abort = 0
+        client_grad_send = client_grad.detach().clone()
+        client_grad_abort = 0
     else:
         client_grad_send = "abort"
         client_grad_abort = 1
 
-    if train_grad_active:
-        if grad_available == 1:
-            grad_encoded.backward(encoder_grad_server)
-            optimizer_grad_encoder.step()
-            grad_available = 1
-
     # print("client_grad_without_encode: ", client_grad_without_encode)
 
     msg = {"grad_client": client_grad_send,
-           "encoder_grad": encoder_grad,
            "client_grad_without_encode": client_grad_without_encode,
-           "grad_encode": grad_encode,
            "train_loss": train_loss,
            "add_correct_train": add_correct_train,
            "add_total_train": add_total_train,
@@ -438,8 +408,8 @@ def main():
     """
     initialize device, server model, initial client model, optimizer, loss, decoder and accepts new clients
     """
-    global grad_available, epoch_finished, device
-    grad_available, epoch_finished = 0, 0
+    global grad_available, epoch_finished, device, epoch
+    grad_available, epoch_finished, epoch = 0, 0, 0
 
     ###
     global prevloss_total, batches_total, average_loss_previous_epoch, lastepoch
@@ -481,10 +451,6 @@ def main():
         global decode
         if model == 'CNN': decode = ModelsServer.Decode()
         if model == 'TCN': decode = ModelsServer.DecodeTCN()
-        if autoencoder_train == 0:
-            if model == 'CNN': decode.load_state_dict(torch.load("server/convdecoder_medical.pth"))
-            if model == 'TCN': decode.load_state_dict(torch.load("convdecoder_TCN.pth"))
-            print("Decoder model loaded")
         decode.eval()
         decode.double().to(device)
         #print("Load decoder parameters complete.")
@@ -492,17 +458,6 @@ def main():
         global optimizerdecode
         optimizerdecode = Adam(decode.parameters(), lr=0.0001)
 
-    #global grad_encoder
-    #grad_encoder = ModelsServer.Grad_Encoder()
-    ##grad_encoder.load_state_dict(torch.load("./grad_encoder_medical.pth"))
-    #grad_encoder.double().to(device)
-    #print("Grad encoder model loaded")
-
-    #global optimizer_grad_encoder
-    #optimizer_grad_encoder = Adam(grad_encoder.parameters(), lr=lr)
-
-    global epoch
-    epoch = 0
 
     s = socket.socket()
     s.bind(("0.0.0.0", port))
