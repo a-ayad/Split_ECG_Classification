@@ -40,24 +40,42 @@ Here's a brief overview of how you can use this project to run split learning on
 The PTB=XL dataset can be downloaded from 
 [link](https://physionet.org/content/ptb-xl/1.0.1/). download and unpack the zip file. Copy the folders "testset" and "trainingset" into the ./server/ directory in the project.
 
-### Set client side configurations
+### Set configurations
 
-To set the client side configuraitons, the file parameter_client.json can be edited.  
+To set the client side configuraitons, the file settings.json can be edited.  
 
 The initial settings are:
 
 ```json
 {
-    "host": "169.254.123.80",
-    "port": 10087,
+    "host": "169.254.123.156",
+    "port": 10089,
     "max_recv": 4096,
 
     "batchsize": 64,
-    "learningrate": 0.0005,
+    "learningrate": 0.001, 
+    "(Comment): Learnrate for CNN": 0.0005,
 
-    "count_flops": 0,
+    "Model": "TCN",
+    "(Comment): For Model, TCN and CNN are viable": 0,
 
     "autoencoder": 0,
+    "count_flops": 0,
+
+    "epochs": 30,
+    "update_mechanism": "static",
+    "update_mechanism: static to use the update_threshold without a mechanism": 0,
+    "update_threshold": 0,
+    "mechanism": "sigmoid",
+
+    
+    "(Comment): To use multiple clients increase the nr_clients to more than 1": 0,
+    "nr_clients": 1,
+    "(Comment): Settings for non-IID & multiple clients:": 0,
+    "num_classes": 2,
+    "pretrain_active": 0,
+    "pretrain_epochs": 30,
+    "mixed_with_IID_data": 0
 }
 
 ```
@@ -72,36 +90,6 @@ Furthermore at the client, the computed FLOPs can be measured.
 To reproduce the different experiments, here the autoencoder can be activated or deactivated (settings: (1 or 0)).
 
 
-### Set serverside configurations
-
-To set the server side configuraitons, the file parameter_server.json can be edited.  
-
-The initial settings are:
-```json
-{
-    "max_nr_clients": 5,
-    "host": "0.0.0.0",
-    "port": 10087,
-    "max_recv": 4096,
-
-    "learningrate": 0.0005,
-    "epochs": 30,
-
-    "autoencoder": 0,
-    "update_mechanism": "static",
-    "update_threshold": 0,
-    "mechanism": "none",
-}
-```
-
-max_nr_clients is the maximal number of clients, that can be connected to the server at the same time.
-To configer the server, the host is initially set to "0.0.0.0" (localhost).
-Also the Port has to be set.
-The max_recv property is the bit rate of the tcp port.
-
-One can set the server side learningrate manually (in all the configurations of the corresponding paper, the same learning rate for server and client was chosen).
-
-
 Also, the update_mechanism can be configured (static or adaptive):
 In the static setting: 
 If the loss of a batch exceeds this threshold, the gradients are not sent back to the client (client side update skipped).
@@ -112,6 +100,9 @@ The adaptive threshold changes over the course of training and according to the 
 ### Running the model
 
 To run the model, the server.py script has to be run the server. Afterwards, the client.py script needs to be run at the client
+
+For multiplee clients, use the server.py and the client1-5.py
+In the settings.json, the number of clients needs to be set accordingly
 
 
 
