@@ -398,10 +398,10 @@ def val_stage(s, pretraining=0):
             val_loss_total += msg["val/test_loss"]
             total_val_nr += 1
 
-            if b_t < 5:
-                print("Label: ", label_val[b_t])
-                print("Pred.: ", torch.round(output_val_server[b_t]))
-                print("-------------------------------------------------------------------------")
+            #if b_t < 5:
+            #    print("Label: ", label_val[b_t])
+            #    print("Pred.: ", torch.round(output_val_server[b_t]))
+            #    print("-------------------------------------------------------------------------")
 
             acc +=val_accuracy(output_val_server.detach().clone().cpu(), label_val.detach().clone().cpu().int()).numpy()
             f1 += val_f1(output_val_server.detach().clone().cpu(), label_val.detach().clone().cpu().int()).numpy()

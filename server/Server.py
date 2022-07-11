@@ -470,11 +470,18 @@ def main():
         print('Conntected with', addr)
         #initialize_client(connectedclients[0])
         clientHandler(conn, addr)
+        
+        for i in range(numclients-1):
+            conn, addr = s.accept()
+            connectedclients.append(conn)
+            print('Conntected with', addr)
+    else:
+        for i in range(numclients):
+            conn, addr = s.accept()
+            connectedclients.append(conn)
+            print('Conntected with', addr)
 
-    for i in range(numclients):
-        conn, addr = s.accept()
-        connectedclients.append(conn)
-        print('Conntected with', addr)
+    
 
     print(connectedclients)
     for epoch in range(num_epochs):

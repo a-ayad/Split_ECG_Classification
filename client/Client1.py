@@ -53,6 +53,7 @@ else:
     pretrain_this_client = 0
 mixed_dataset = data["mixed_with_IID_data"]
 pretrain_epochs = data["pretrain_epochs"]
+IID_percentage = data["IID_percentage"]
 
 if weights_and_biases:
     wandb.init(project="TCN new Metric", entity="mfrei")
@@ -121,6 +122,7 @@ class PTB_XL(Dataset):
 
 
 
+
 def init_train_val_dataset():
     train_dataset = PTB_XL('train')
     val_dataset = PTB_XL('val')
@@ -137,8 +139,8 @@ def init_train_val_dataset():
     if pretrain_this_client:
         raw_dataset = PTB_XL('raw')
         print("len raw dataset", len(raw_dataset))
-        pretrain_dataset, no_dataset = torch.utils.data.random_split(raw_dataset, [963, 18304],
-                                                       generator=torch.Generator().manual_seed(42))
+        pretrain_dataset, no_dataset = torch.utils.data.random_split(raw_dataset, [round(19267*IID_percentage), round(19267*(1-IID_percentage))],
+                                                                     generator=torch.Generator().manual_seed(42))
         print("pretrain_dataset length: ", len(pretrain_dataset))
         global pretrain_loader
         pretrain_loader = torch.utils.data.DataLoader(pretrain_dataset, batch_size=batchsize, shuffle=True)
@@ -146,7 +148,7 @@ def init_train_val_dataset():
     if mixed_dataset:
         raw_dataset = PTB_XL('raw')
         print("len raw dataset", len(raw_dataset))
-        pretrain_dataset, no_dataset = torch.utils.data.random_split(raw_dataset, [963, 18304],
+        pretrain_dataset, no_dataset = torch.utils.data.random_split(raw_dataset, [round(19267*IID_percentage), round(19267*(1-IID_percentage))],
                                                                      generator=torch.Generator().manual_seed(42))
         print("len train dataset", len(train_dataset))
         train_dataset = torch.utils.data.ConcatDataset((pretrain_dataset, train_dataset))
@@ -398,10 +400,10 @@ def val_stage(s, pretraining=0):
             val_loss_total += msg["val/test_loss"]
             total_val_nr += 1
 
-            if b_t < 5:
-                print("Label: ", label_val[b_t])
-                print("Pred.: ", torch.round(output_val_server[b_t]))
-                print("-------------------------------------------------------------------------")
+            #if b_t < 5:
+            #    print("Label: ", label_val[b_t])
+            #    print("Pred.: ", torch.round(output_val_server[b_t]))
+            #    print("-------------------------------------------------------------------------")
 
             acc +=val_accuracy(output_val_server.detach().clone().cpu(), label_val.detach().clone().cpu().int()).numpy()
             f1 += val_f1(output_val_server.detach().clone().cpu(), label_val.detach().clone().cpu().int()).numpy()

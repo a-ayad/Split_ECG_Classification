@@ -1,6 +1,6 @@
 {
-    "host": "169.254.123.156",
-    "port": 10089,
+    "host": "134.130.35.106",
+    "port": 10093,
     "max_recv": 4096,
 
     "batchsize": 64,
@@ -15,17 +15,18 @@
 
     "epochs": 30,
     "update_mechanism": "static",
-    "update_mechanism: static to use the update_threshold without a mechanism": 0,
+    "(Comment): use static to set an update_threshold manually, any other value will result in the mechanism being used": 0,
     "update_threshold": 0,
     "mechanism": "sigmoid",
 
     
     "(Comment): To use multiple clients increase the nr_clients to more than 1": 0,
-    "nr_clients": 1,
+    "nr_clients": 5,
     "(Comment): Settings for non-IID & multiple clients:": 0,
     "num_classes": 2,
-    "pretrain_active": 0,
+    "pretrain_active": 1,
     "pretrain_epochs": 30,
-    "mixed_with_IID_data": 0
+    "mixed_with_IID_data": 1,
+    "IID_percentage": 0.1
 }
 

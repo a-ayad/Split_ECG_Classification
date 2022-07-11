@@ -3,42 +3,13 @@
 This is the repository containing the code for this paper "Efficient and Private ECG Classification on the Edge Using a Modified Split Learning Mechanism"
 
 
-## Requirements
-
-### Server
-* Python
-#### Packages
-* socket
-* struct
-* pickle
-* numpy
-* json
-* torch
-* threading
-* time
-
-### Client
-* Python
-#### Packages
-* socket
-* struct
-* pickle
-* time
-* json
-* numpy
-* matplotlib
-* torch
-* torchvision
-* sys
-
-
 ## Simple usage
 
 Here's a brief overview of how you can use this project to run split learning on a server and a client.
 
 ### Download the dataset
 The PTB=XL dataset can be downloaded from 
-[link](https://physionet.org/content/ptb-xl/1.0.1/). download and unpack the zip file. Copy the folders "testset" and "trainingset" into the ./server/ directory in the project.
+[link](https://physionet.org/content/ptb-xl/1.0.1/). download and unpack the zip file. Place it with its original name "ptb-xl-a-large-publicly..." in the working directory
 
 ### Set configurations
 
@@ -84,7 +55,7 @@ To configure the connection, "host" needs to be set to the ip adderess of the se
 The max_recv property is the bit rate of the tcp port.
 
 
-To adjust the training parameter, the bacthsize can be set as integer values and the learningrate as a float value.
+To adjust the training parameter, the batchsize can be set as integer values and the learningrate as a float value.
 Furthermore at the client, the computed FLOPs can be measured.
 
 To reproduce the different experiments, here the autoencoder can be activated or deactivated (settings: (1 or 0)).
