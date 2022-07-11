@@ -1,10 +1,11 @@
 {
-    "host": "169.254.123.126",
-    "port": 10087,
+    "host": "134.130.35.106",
+    "port": 10089,
     "max_recv": 4096,
 
     "batchsize": 64,
-    "learningrate": 0.0005,
+    "learningrate": 0.001, 
+    "comment": 0.0005,
 
     "count_flops": 0,
 

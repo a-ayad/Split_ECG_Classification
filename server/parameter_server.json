@@ -1,16 +1,19 @@
 {
     "max_nr_clients": 5,
     "host": "0.0.0.0",
-    "port": 10087,
+    "port": 10083,
     "max_recv": 4096,
 
-    "learningrate": 0.0005,
+    "learningrate": 0.001, 
+    "comment": 0.0005,
+    
     "epochs": 30,
 
     "autoencoder": 0,
     "update_mechanism": "static",
+    "update_mechanism: static to use the update_threshold without a mechanism": 0,
     "update_threshold": 0,
-    "mechanism": "none",
+    "mechanism": "sigmoid",
     
-    "pretrain_active": 0
+    "pretrain_active": 1
 }

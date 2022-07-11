@@ -1,0 +1,58 @@
+wandb_version: 1
+
+'Average data transfer/epoch (MB): ':
+  desc: null
+  value: 3671.246733
+'Average dismissal rate: ':
+  desc: null
+  value: 0.0
+'PC: ':
+  desc: null
+  value: 2
+_wandb:
+  desc: null
+  value:
+    cli_version: 0.12.14
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    python_version: 3.9.7
+    start_time: 1654686142
+    t:
+      1:
+      - 1
+      - 5
+      - 41
+      - 53
+      - 55
+      2:
+      - 1
+      - 5
+      - 41
+      - 53
+      - 55
+      3:
+      - 16
+      - 24
+      4: 3.9.7
+      5: 0.12.14
+      8:
+      - 5
+learning_rate:
+  desc: null
+  value: 0.0005
+total_MegaFLOPS:
+  desc: null
+  value: 0.0
+total_MegaFLOPS modal:
+  desc: null
+  value: 0.0
+total_MegaFLOPS_backprob:
+  desc: null
+  value: 0.0
+total_MegaFLOPS_encoder:
+  desc: null
+  value: 0.0
+total_MegaFLOPS_forward:
+  desc: null
+  value: 0.0

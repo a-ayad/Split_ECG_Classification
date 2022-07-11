@@ -1,0 +1,11 @@
+2022-06-08 12:47:11,354 INFO    MainThread:201829 [wandb_setup.py:_flush():75] Loading settings from /home/marian/.config/wandb/settings
+2022-06-08 12:47:11,354 INFO    MainThread:201829 [wandb_setup.py:_flush():75] Loading settings from /home/marian/VisualStudioCode/Split_ECG_Classification/wandb/settings
+2022-06-08 12:47:11,354 INFO    MainThread:201829 [wandb_setup.py:_flush():75] Loading settings from environment variables: {}
+2022-06-08 12:47:11,354 INFO    MainThread:201829 [wandb_setup.py:_flush():75] Inferring run settings from compute environment: {'program_relpath': 'client/Client.py', 'program': '/home/marian/VisualStudioCode/Split_ECG_Classification/client/Client.py'}
+2022-06-08 12:47:11,354 INFO    MainThread:201829 [wandb_init.py:_log_setup():438] Logging user logs to /home/marian/VisualStudioCode/Split_ECG_Classification/wandb/run-20220608_124711-1s9oasam/logs/debug.log
+2022-06-08 12:47:11,354 INFO    MainThread:201829 [wandb_init.py:_log_setup():439] Logging internal logs to /home/marian/VisualStudioCode/Split_ECG_Classification/wandb/run-20220608_124711-1s9oasam/logs/debug-internal.log
+2022-06-08 12:47:11,354 INFO    MainThread:201829 [wandb_init.py:init():472] calling init triggers
+2022-06-08 12:47:11,354 INFO    MainThread:201829 [wandb_init.py:init():475] wandb.init called with sweep_config: {}
+config: {'learning_rate': 0.0005, 'batch_size': 64, 'autoencoder': 0}
+2022-06-08 12:47:11,354 INFO    MainThread:201829 [wandb_init.py:init():520] wandb.init() called when a run is still active
+2022-06-08 12:47:11,354 INFO    MainThread:201829 [wandb_run.py:_config_callback():1129] config_cb None None {'learning_rate': 0.0005, 'PC: ': 2}
