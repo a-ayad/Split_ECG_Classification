@@ -27,7 +27,7 @@ The initial settings are:
     "learningrate": 0.001, 
     "(Comment): Learnrate for CNN": 0.0005,
 
-    "Model": "TCN",
+    "Model": "CNN",
     "(Comment): For Model, TCN and CNN are viable": 0,
 
     "autoencoder": 0,
