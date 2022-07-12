@@ -1,13 +1,5 @@
 # Advanced server side configurations
 
-## Host configureation
-By default, Host IP and Port are read from the parameter_client.json file. The paramter can also be set directly in the server.py file. Server IP should alwas be "0.0.0.0" (local host)
-
-```python
-host = data["host"]
-port = data["port"]
-```
-
 ## Training parameter configuration
 By default, Training and tcp paramters (learningrate, update threshold, update_mechanism, mechanism) are read from the parameter_server.json file.
 

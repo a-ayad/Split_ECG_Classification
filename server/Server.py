@@ -1,6 +1,7 @@
 import socket
 import struct
 import pickle
+#from MeCab import Model
 import numpy as np
 import json
 import torch
@@ -18,7 +19,8 @@ import os
 import ModelsServer
 
 # load data from json file
-f = open('server\parameter_server.json', )
+#f = open('server/parameter_server.json', )
+f = open('settings.json', )
 data = json.load(f)
 
 # set parameters fron json file
@@ -27,18 +29,18 @@ port = data["port"]
 max_recv = data["max_recv"]
 lr = data["learningrate"]
 update_treshold = data["update_threshold"]
-max_numclients = data["max_nr_clients"]
+numclients = data["nr_clients"]
 autoencoder = data["autoencoder"]
-#autoencoder_train = data["autoencoder_train"]
 num_epochs = data["epochs"]
 mech = data["mechanism"]
 pretrain_active = data["pretrain_active"]
 update_mechanism = data["update_mechanism"]
+model = data["Model"]
 
 data_send_per_epoch = 0
 client_weights = 0
 client_weights_available = 0
-autoencoder_train = 0
+
 
 
 def send_msg(sock, content):
@@ -90,8 +92,7 @@ def recv_msg(sock):
     """
     gets the message length (which corresponds to the first for bytes of the recieved bytestream) with the recvall function
 
-    :param
-        sock: socket
+    :param sock: socket
     :return: returns the data retrieved from the recvall function
     """
     raw_msglen = recvall(sock, 4)
@@ -131,7 +132,7 @@ def handle_request(sock, getid, content):
         0: calc_gradients,
         1: get_testacc,
         2: updateclientmodels,
-        3: epoch_finished,
+        3: epoch_is_finished,
     }
     switcher.get(getid, "invalid request recieved")(sock, content)
 
@@ -187,9 +188,14 @@ def updateclientmodels(sock, updatedweights):
 
 
 def dropout_mechanisms(mechanism, epoch):
+    """
+    returns the predefined dropout function
+
+    :mechanism: string to define dropout function
+    :epoch: epoch number to adjust the dropout functions
+    """
     def sigmoid(x):
         return 1 / (1 + np.exp(-x))
-
     if mechanism == 'linear':
         return (num_epochs - epoch) / num_epochs
     if mechanism == 'none':
@@ -199,6 +205,12 @@ def dropout_mechanisms(mechanism, epoch):
 
 
 def grad_preprocessing(grad):
+    """
+    Only relevant when the gradient is encoded, Apllys a scaling to transform 
+    the gradients to a range between 0 and 1
+
+    :grad: gradient
+    """
     grad_new = grad.numpy()
     for a in range(64):
         grad_new[a] = scaler.fit_transform(grad[a])
@@ -222,26 +234,14 @@ def calc_gradients(conn, msg):
     global grad_available
     start_time_training = time.time()
     with torch.no_grad():
-        client_output_train, client_output_train_without_ae, label_train, batchsize, train_active, encoder_grad_server, train_grad_active, grad_encode = msg['client_output_train'], msg['client_output_train_without_ae'], msg['label_train'], msg[
-            'batchsize'], msg['train_active'], msg['encoder_grad_server'], msg['train_grad_active'], msg['grad_encode']  # client output tensor
+        client_output_train, client_output_train_without_ae, label_train, batchsize = msg['client_output_train'], msg['client_output_train_without_ae'], msg['label_train'], msg[
+            'batchsize']
         client_output_train, label_train = client_output_train.to(device), label_train
     if autoencoder:
-        if train_active:
-            #print("train_active")
-            optimizerdecode.zero_grad()
         client_output_train = Variable(client_output_train, requires_grad=True)
-        client_output_train_decode = decode(client_output_train)
-        if train_active:
-            loss_autoencoder = error_autoencoder(client_output_train_without_ae, client_output_train_decode)
-            loss_autoencoder.backward()
-            encoder_grad = client_output_train.grad.detach().clone()#
-            optimizerdecode.step()
-            #print("loss_autoencoder: ", loss_autoencoder)
-        else:
-            encoder_grad = 0
+        client_output_train_decode = decode(client_output_train)  
     else:
         client_output_train_decode = client_output_train.detach().clone()
-        encoder_grad = 0
     #client_output_train = Variable(client_output_train, requires_grad=True)
     #client_output_train_decode = decode(client_output_train)
     #encoder_grad = 0
@@ -277,36 +277,19 @@ def calc_gradients(conn, msg):
         if train_loss > update_treshold:
             update = True
     else:
-        if random_number_between_0_and_1 < dropout_mechanisms(mechanism=mech, epoch=epoch):
+        if random_number_between_0_and_1 < update_mchanism(epoch=epoch, loss = train_loss): #dropout_mechanisms(mechanism=mech, epoch=epoch):
             update = True
     if update:
-        if grad_encode:
-            if train_grad_active:
-                optimizer_grad_encoder.zero_grad()
-            grad_encoded = grad_encoder(grad_preprocessing(client_grad.detach().clone().cpu()))
-            client_grad_send = grad_encoded.detach().clone()
-            if train_grad_active:
-                client_grad_without_encode = grad_preprocessing(client_grad.detach().clone().cpu())
-            client_grad_abort = 0
-        else:
-            client_grad_send = client_grad.detach().clone()
-            client_grad_abort = 0
+        client_grad_send = client_grad.detach().clone()
+        client_grad_abort = 0
     else:
         client_grad_send = "abort"
         client_grad_abort = 1
 
-    if train_grad_active:
-        if grad_available == 1:
-            grad_encoded.backward(encoder_grad_server)
-            optimizer_grad_encoder.step()
-            grad_available = 1
-
     # print("client_grad_without_encode: ", client_grad_without_encode)
 
     msg = {"grad_client": client_grad_send,
-           "encoder_grad": encoder_grad,
            "client_grad_without_encode": client_grad_without_encode,
-           "grad_encode": grad_encode,
            "train_loss": train_loss,
            "add_correct_train": add_correct_train,
            "add_total_train": add_total_train,
@@ -321,9 +304,35 @@ def calc_gradients(conn, msg):
     send_msg(conn, msg)
 
 
-def epoch_finished(conn, msg):
-    global epoch_unfinished
-    epoch_unfinished = 1
+def update_mchanism(loss, epoch):
+    def sigmoid(x):
+        return 1 / (1 + np.exp(-x))
+    a = sigmoid((-epoch + num_epochs/2) / 3)
+    #
+    global prevloss_total, batches_total, average_loss_previous_epoch, lastepoch
+
+    if epoch > lastepoch and epoch > 0:
+        average_loss_previous_epoch = prevloss_total / batches_total
+        prevloss_total = 0
+        batches_total = 0
+    
+    lastepoch = epoch
+    prevloss_total += loss
+    batches_total += 1
+
+    if loss < average_loss_previous_epoch:
+        return 1
+    else:
+        return 0
+
+
+def epoch_is_finished(conn, msg):
+    """
+    Sets the bool variable epoch_finished to True, to inform the Server, that the (training for one epoch / validation / testing) is finished
+    :param conn: the connected socket of the currently active client
+    """
+    global epoch_finished
+    epoch_finished = 1
 
 
 def initialize_client(conn):
@@ -331,7 +340,7 @@ def initialize_client(conn):
     called when new client connect. if new connected client is not the first connected
     client, the send the initial weights to
     the new connected client
-    :param conn:
+    :param conn: the connected socket of the currently active client
     """
     if len(connectedclients) == 1:
         msg = 0
@@ -347,50 +356,48 @@ def initialize_client(conn):
 
 
 def clientHandler(conn, addr):
-    #initialize_client(conn)
-    global epoch_unfinished
-    while True:
+    """
+    called when training on a client starts. The server communicates with the client, until the training epoch is finished
+    :param conn: the connected socket of the currently active client
+    """
+    global epoch_finished
+    while not epoch_finished:
         recieve_msg(conn)
-        # print("epoch_unfinished: ", epoch_unfinished)
-        if epoch_unfinished:
-            print("epoch finished")
-            break
-        # print("No message, wait!")
-    epoch_unfinished = 0
+    print("epoch finished")
+    epoch_finished = 0
 
 
 def train_client_for_one_epoch(conn):
+    """
+    Initiates training and validation cycle on a client
+    :param conn: the connected socket of the currently active client
+    """
+    #training cycle for one epoch
     send_request(conn, 1, 0)
-    global epoch_unfinished
-    while True:
+    global epoch_finished
+    while not epoch_finished:
         recieve_msg(conn)
-        #print("epoch_unfinished: ", epoch_unfinished)
-        if epoch_unfinished:
-            print("epoch finished")
-            break
-        #print("No message, wait!")
-    epoch_unfinished = 0
-    #val Phase
+    print("epoch finished")
+    epoch_finished = 0
+    #validation cycle
     send_request(conn, 2, 0)
-    while True:
+    while not epoch_finished:
         recieve_msg(conn)
-        # print("epoch_unfinished: ", epoch_unfinished)
-        if epoch_unfinished:
-            print("val finished")
-            break
-    epoch_unfinished = 0
+    print("val finished")
+    epoch_finished = 0
 
 
 def test_client(conn, num_epochs):
+    """
+    Initiates testing cycle on a client
+    :param conn: the connected socket of the currently active client
+    """
     send_request(conn, 3, num_epochs)
-    global epoch_unfinished
-    while True:
+    global epoch_finished
+    while not epoch_finished:
         recieve_msg(conn)
-        # print("epoch_unfinished: ", epoch_unfinished)
-        if epoch_unfinished:
-            print("epoch finished")
-            break
-    epoch_unfinished = 0
+    print("test cycle finished")
+    epoch_finished = 0
 
 
 connectedclients = []
@@ -401,15 +408,15 @@ def main():
     """
     initialize device, server model, initial client model, optimizer, loss, decoder and accepts new clients
     """
-    global grad_available
-    grad_available = 0
+    global grad_available, epoch_finished, device, epoch
+    grad_available, epoch_finished, epoch = 0, 0, 0
 
-    global epoch_unfinished
-    epoch_unfinished = 0
+    ###
+    global prevloss_total, batches_total, average_loss_previous_epoch, lastepoch
+    prevloss_total, batches_total, average_loss_previous_epoch, lastepoch = 0, 0, 999, 0
+    ###
 
     print(torch.version.cuda)
-    global device
-    # device = 'cpu'#
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     if (torch.cuda.is_available()):
         print("training on gpu")
@@ -422,26 +429,17 @@ def main():
     torch.backends.cudnn.deterministic = True
 
     global server
-    server = ModelsServer.Server()
-    server.double().to(device)
-
-    """
-    global client
-    client = initial_Client()
-    client.to(device)
-    print("initial_Client complete.")
-    """
+    if model == 'TCN': server = ModelsServer.Small_TCN_5(5, 12).double().to(device)
+    if model == 'CNN': server = ModelsServer.Server().double().to(device)
 
     global optimizer
     #optimizer = SGD(server.parameters(), lr=lr, momentum=0.9)
     optimizer = AdamW(server.parameters(), lr=lr)
 
-
     global error
     #error = nn.CrossEntropyLoss()
     error = nn.BCELoss()
-    print("Calculate CrossEntropyLoss complete.")
-
+    #error = nn.BCEWithLogitsLoss()
 
     global error_autoencoder
     error_autoencoder = nn.MSELoss()
@@ -449,13 +447,10 @@ def main():
     global scaler
     scaler = MinMaxScaler()
 
-
     if autoencoder:
         global decode
-        decode = ModelsServer.Decode()
-        if autoencoder_train == 0:
-            decode.load_state_dict(torch.load("./convdecoder_medical.pth"))
-            print("Decoder model loaded")
+        if model == 'CNN': decode = ModelsServer.Decode()
+        if model == 'TCN': decode = ModelsServer.DecodeTCN()
         decode.eval()
         decode.double().to(device)
         #print("Load decoder parameters complete.")
@@ -463,21 +458,10 @@ def main():
         global optimizerdecode
         optimizerdecode = Adam(decode.parameters(), lr=0.0001)
 
-    global grad_encoder
-    grad_encoder = ModelsServer.Grad_Encoder()
-    #grad_encoder.load_state_dict(torch.load("./grad_encoder_medical.pth"))
-    grad_encoder.double().to(device)
-    print("Grad encoder model loaded")
-
-    global optimizer_grad_encoder
-    optimizer_grad_encoder = Adam(grad_encoder.parameters(), lr=lr)
-
-    global epoch
-    epoch = 0
 
     s = socket.socket()
-    s.bind((host, port))
-    s.listen(max_numclients)
+    s.bind(("0.0.0.0", port))
+    s.listen(numclients)
     print("Listen to client reply.")
 
     if pretrain_active:
@@ -486,11 +470,18 @@ def main():
         print('Conntected with', addr)
         #initialize_client(connectedclients[0])
         clientHandler(conn, addr)
+        
+        for i in range(numclients-1):
+            conn, addr = s.accept()
+            connectedclients.append(conn)
+            print('Conntected with', addr)
+    else:
+        for i in range(numclients):
+            conn, addr = s.accept()
+            connectedclients.append(conn)
+            print('Conntected with', addr)
 
-    for i in range(1):
-        conn, addr = s.accept()
-        connectedclients.append(conn)
-        print('Conntected with', addr)
+    
 
     print(connectedclients)
     for epoch in range(num_epochs):

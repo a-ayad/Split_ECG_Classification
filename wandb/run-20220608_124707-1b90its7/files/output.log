@@ -1,0 +1,118 @@
+learningrate:  0.0005
+grad_encode:  0
+gradAE_train:  0
+deactivate_grad_train_after_num_epochs:  20
+Getting the metadata host:  134.130.35.93
+Getting the metadata port:  10087
+Getting the metadata batchsize:  64
+Autoencoder:  0
+count_flops:  0
+autoencoder_train:  0
+deactivate_train_after_num_epochs:  20
+/home/marian/anaconda3/envs/Medical-MESL/lib/python3.9/site-packages/sklearn/base.py:329: UserWarning: Trying to unpickle estimator StandardScaler from version 0.23.2 when using version 1.0.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/modules/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+(1000, 12)
+(19267, 1000, 12) (19267, 5) (2163, 1000, 12) (2163, 5)
+training on gpu
+training on, cuda:0
+Start Client
+Start Optimizer
+Start loss calcu
+Start socket connect
+Socket connect success, to. 134.130.35.93 10087
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 1, AUC_train: 0.6819, Accuracy_micro: 0.4481, Precision: 0.6183, Recall: 0.4673, F1: 0.5235, trainingtime for epoch: 33.449725s, batches abortrate:0.00, train_loss: 0.5241
+status_epoch_val:  epoch: 1,AUC_val: 0.7435 ,Accuracy: 0.5504, Precision: 0.6763, Recall: 0.5850, F1: 0.6265, val_loss: 0.4116
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 2, AUC_train: 0.7638, Accuracy_micro: 0.5842, Precision: 0.7221, Recall: 0.6129, F1: 0.6588, trainingtime for epoch: 33.777489s, batches abortrate:0.00, train_loss: 0.3883
+status_epoch_val:  epoch: 2,AUC_val: 0.7950 ,Accuracy: 0.6432, Precision: 0.7003, Recall: 0.6940, F1: 0.6959, val_loss: 0.3742
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 3, AUC_train: 0.7903, Accuracy_micro: 0.6332, Precision: 0.7556, Recall: 0.6567, F1: 0.7001, trainingtime for epoch: 33.527950s, batches abortrate:0.00, train_loss: 0.3499
+status_epoch_val:  epoch: 3,AUC_val: 0.7783 ,Accuracy: 0.6016, Precision: 0.7272, Recall: 0.6414, F1: 0.6804, val_loss: 0.3775
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 4, AUC_train: 0.8017, Accuracy_micro: 0.6502, Precision: 0.7695, Recall: 0.6755, F1: 0.7170, trainingtime for epoch: 33.469560s, batches abortrate:0.00, train_loss: 0.3329
+status_epoch_val:  epoch: 4,AUC_val: 0.7973 ,Accuracy: 0.6412, Precision: 0.7013, Recall: 0.6987, F1: 0.6993, val_loss: 0.3599
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 5, AUC_train: 0.8116, Accuracy_micro: 0.6694, Precision: 0.7846, Recall: 0.6904, F1: 0.7327, trainingtime for epoch: 33.459386s, batches abortrate:0.00, train_loss: 0.3105
+status_epoch_val:  epoch: 5,AUC_val: 0.7907 ,Accuracy: 0.6188, Precision: 0.7071, Recall: 0.6796, F1: 0.6921, val_loss: 0.3663
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 6, AUC_train: 0.8178, Accuracy_micro: 0.6783, Precision: 0.7899, Recall: 0.7018, F1: 0.7415, trainingtime for epoch: 34.400685s, batches abortrate:0.00, train_loss: 0.3060
+status_epoch_val:  epoch: 6,AUC_val: 0.7801 ,Accuracy: 0.5865, Precision: 0.7105, Recall: 0.6533, F1: 0.6793, val_loss: 0.3695
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 7, AUC_train: 0.8282, Accuracy_micro: 0.6966, Precision: 0.8060, Recall: 0.7178, F1: 0.7576, trainingtime for epoch: 34.448779s, batches abortrate:0.00, train_loss: 0.2844
+status_epoch_val:  epoch: 7,AUC_val: 0.8064 ,Accuracy: 0.6488, Precision: 0.7102, Recall: 0.7150, F1: 0.7118, val_loss: 0.3577
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 8, AUC_train: 0.8327, Accuracy_micro: 0.7042, Precision: 0.8083, Recall: 0.7266, F1: 0.7635, trainingtime for epoch: 33.537305s, batches abortrate:0.00, train_loss: 0.2812
+status_epoch_val:  epoch: 8,AUC_val: 0.8010 ,Accuracy: 0.6535, Precision: 0.7415, Recall: 0.6857, F1: 0.7118, val_loss: 0.3485
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 9, AUC_train: 0.8353, Accuracy_micro: 0.7076, Precision: 0.8149, Recall: 0.7295, F1: 0.7683, trainingtime for epoch: 33.468864s, batches abortrate:0.00, train_loss: 0.2738
+status_epoch_val:  epoch: 9,AUC_val: 0.8010 ,Accuracy: 0.6618, Precision: 0.7384, Recall: 0.6866, F1: 0.7108, val_loss: 0.3509
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 10, AUC_train: 0.8383, Accuracy_micro: 0.7117, Precision: 0.8170, Recall: 0.7351, F1: 0.7723, trainingtime for epoch: 33.707823s, batches abortrate:0.00, train_loss: 0.2718
+status_epoch_val:  epoch: 10,AUC_val: 0.7815 ,Accuracy: 0.6039, Precision: 0.7478, Recall: 0.6377, F1: 0.6876, val_loss: 0.3713
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 11, AUC_train: 0.8423, Accuracy_micro: 0.7175, Precision: 0.8218, Recall: 0.7415, F1: 0.7784, trainingtime for epoch: 33.774760s, batches abortrate:0.00, train_loss: 0.2621
+status_epoch_val:  epoch: 11,AUC_val: 0.7917 ,Accuracy: 0.6427, Precision: 0.7437, Recall: 0.6636, F1: 0.7005, val_loss: 0.3540
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 12, AUC_train: 0.8516, Accuracy_micro: 0.7318, Precision: 0.8329, Recall: 0.7567, F1: 0.7918, trainingtime for epoch: 33.434359s, batches abortrate:0.00, train_loss: 0.2497
+status_epoch_val:  epoch: 12,AUC_val: 0.7974 ,Accuracy: 0.6324, Precision: 0.7180, Recall: 0.6894, F1: 0.7026, val_loss: 0.3699
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 13, AUC_train: 0.8545, Accuracy_micro: 0.7371, Precision: 0.8354, Recall: 0.7620, F1: 0.7957, trainingtime for epoch: 33.332650s, batches abortrate:0.00, train_loss: 0.2433
+status_epoch_val:  epoch: 13,AUC_val: 0.7942 ,Accuracy: 0.6397, Precision: 0.7368, Recall: 0.6722, F1: 0.7022, val_loss: 0.3661
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 14, AUC_train: 0.8590, Accuracy_micro: 0.7458, Precision: 0.8432, Recall: 0.7687, F1: 0.8030, trainingtime for epoch: 33.349560s, batches abortrate:0.00, train_loss: 0.2365
+status_epoch_val:  epoch: 14,AUC_val: 0.7971 ,Accuracy: 0.6377, Precision: 0.7258, Recall: 0.6851, F1: 0.7040, val_loss: 0.3618
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 15, AUC_train: 0.8638, Accuracy_micro: 0.7526, Precision: 0.8481, Recall: 0.7769, F1: 0.8096, trainingtime for epoch: 33.322410s, batches abortrate:0.00, train_loss: 0.2304
+status_epoch_val:  epoch: 15,AUC_val: 0.7905 ,Accuracy: 0.6231, Precision: 0.7270, Recall: 0.6687, F1: 0.6962, val_loss: 0.3785
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 16, AUC_train: 0.8668, Accuracy_micro: 0.7574, Precision: 0.8511, Recall: 0.7819, F1: 0.8142, trainingtime for epoch: 33.297618s, batches abortrate:0.00, train_loss: 0.2258
+status_epoch_val:  epoch: 16,AUC_val: 0.7959 ,Accuracy: 0.6491, Precision: 0.7355, Recall: 0.6766, F1: 0.7040, val_loss: 0.3766
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 17, AUC_train: 0.8673, Accuracy_micro: 0.7577, Precision: 0.8502, Recall: 0.7834, F1: 0.8143, trainingtime for epoch: 33.294760s, batches abortrate:0.00, train_loss: 0.2250
+status_epoch_val:  epoch: 17,AUC_val: 0.7892 ,Accuracy: 0.6177, Precision: 0.7353, Recall: 0.6618, F1: 0.6956, val_loss: 0.3809
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 18, AUC_train: 0.8746, Accuracy_micro: 0.7705, Precision: 0.8586, Recall: 0.7955, F1: 0.8248, trainingtime for epoch: 33.311346s, batches abortrate:0.00, train_loss: 0.2127
+status_epoch_val:  epoch: 18,AUC_val: 0.7990 ,Accuracy: 0.6481, Precision: 0.7022, Recall: 0.7017, F1: 0.7014, val_loss: 0.3871
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 19, AUC_train: 0.8768, Accuracy_micro: 0.7731, Precision: 0.8627, Recall: 0.7987, F1: 0.8283, trainingtime for epoch: 33.354157s, batches abortrate:0.00, train_loss: 0.2098
+status_epoch_val:  epoch: 19,AUC_val: 0.7888 ,Accuracy: 0.6311, Precision: 0.7300, Recall: 0.6634, F1: 0.6940, val_loss: 0.4012
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 20, AUC_train: 0.8811, Accuracy_micro: 0.7797, Precision: 0.8649, Recall: 0.8069, F1: 0.8337, trainingtime for epoch: 33.645472s, batches abortrate:0.00, train_loss: 0.2027
+status_epoch_val:  epoch: 20,AUC_val: 0.7896 ,Accuracy: 0.6355, Precision: 0.7553, Recall: 0.6534, F1: 0.6994, val_loss: 0.4007
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 21, AUC_train: 0.8830, Accuracy_micro: 0.7828, Precision: 0.8664, Recall: 0.8103, F1: 0.8365, trainingtime for epoch: 33.352421s, batches abortrate:0.00, train_loss: 0.2013
+status_epoch_val:  epoch: 21,AUC_val: 0.7861 ,Accuracy: 0.6181, Precision: 0.7563, Recall: 0.6454, F1: 0.6955, val_loss: 0.4019
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 22, AUC_train: 0.8860, Accuracy_micro: 0.7875, Precision: 0.8723, Recall: 0.8142, F1: 0.8413, trainingtime for epoch: 33.588126s, batches abortrate:0.00, train_loss: 0.1953
+status_epoch_val:  epoch: 22,AUC_val: 0.7990 ,Accuracy: 0.6393, Precision: 0.7198, Recall: 0.6931, F1: 0.7050, val_loss: 0.4020
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 23, AUC_train: 0.8890, Accuracy_micro: 0.7934, Precision: 0.8768, Recall: 0.8187, F1: 0.8457, trainingtime for epoch: 33.312042s, batches abortrate:0.00, train_loss: 0.1902
+status_epoch_val:  epoch: 23,AUC_val: 0.7925 ,Accuracy: 0.6270, Precision: 0.7322, Recall: 0.6710, F1: 0.6993, val_loss: 0.4063
+data_send_per_epoch:  1696.28249  MegaBytes
+data_recieved_per_epoch:  1696.330951 MegaBytes
+status_epoch_train:  epoch: 24, AUC_train: 0.8934, Accuracy_micro: 0.7995, Precision: 0.8782, Recall: 0.8273, F1: 0.8510, trainingtime for epoch: 33.527731s, batches abortrate:0.00, train_loss: 0.1851
