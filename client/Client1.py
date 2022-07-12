@@ -31,7 +31,7 @@ output_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardio
 client_num = 1
 IID = 0 #to use IID data like in the single client experiment
 average_setting = 'micro'
-weights_and_biases = 0
+weights_and_biases = 1
 
 f = open('settings.json', )
 data = json.load(f)
@@ -54,9 +54,10 @@ else:
 mixed_dataset = data["mixed_with_IID_data"]
 pretrain_epochs = data["pretrain_epochs"]
 IID_percentage = data["IID_percentage"]
+autoencoder_train = data["autoencoder_train"]
 
 if weights_and_biases:
-    wandb.init(project="TCN new Metric", entity="mfrei")
+    wandb.init(project="TCN-nonIID-5", entity="mfrei")
     wandb.init(config={
         "learning_rate": lr,
         "batch_size": batchsize,
@@ -148,7 +149,7 @@ def init_train_val_dataset():
     if mixed_dataset:
         raw_dataset = PTB_XL('raw')
         print("len raw dataset", len(raw_dataset))
-        pretrain_dataset, no_dataset = torch.utils.data.random_split(raw_dataset, [round(19267*IID_percentage), round(19267*(1-IID_percentage))],
+        pretrain_dataset, no_dataset = torch.utils.data.random_split(raw_dataset,  [round(19267*IID_percentage), round(19267*(1-IID_percentage))],
                                                                      generator=torch.Generator().manual_seed(42))
         print("len train dataset", len(train_dataset))
         train_dataset = torch.utils.data.ConcatDataset((pretrain_dataset, train_dataset))
@@ -699,6 +700,9 @@ def init_nn_parameters():
         global encode
         encode = Models.Encode()
         print("Start Encoder")
+        if autoencoder_train == 0:
+            if model == 'CNN': encode.load_state_dict(torch.load("client/convencoder_medical.pth"))
+            if model == 'TCN': encode.load_state_dict(torch.load("convencoder_TCN.pth"))
         encode.eval()
         print("Start eval")
         encode.double().to(device)

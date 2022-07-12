@@ -1,4 +1,4 @@
-name: Medical-MESL1
+name: Medical-Split-Learning
 channels:
   - pytorch
   - conda-forge
@@ -183,4 +183,4 @@ dependencies:
   - pip:
     - pytorch-nemo==0.0.8
     - thop==0.1.0-2207010342
-prefix: /home/marian/anaconda3/envs/Medical-MESL1
+prefix: /home/marian/anaconda3/envs/Medical-Split-Learning
