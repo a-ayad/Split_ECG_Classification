@@ -70,10 +70,10 @@ The adaptive threshold changes over the course of training and according to the 
 
 ### Running the model
 
-To run the model, the server.py script has to be run the server. Afterwards, the client.py script needs to be run at the client
+To run the model, the server.py script has to be started on the server. Afterwards, the client.py script needs to be started on the client.
 
-For multiplee clients, use the server.py and the client1-5.py
-In the settings.json, the number of clients needs to be set accordingly
+For multiplee clients, use the server.py and the client1-5.py.
+In the settings.json, the number of clients needs to be set accordingly.
 
 
 
