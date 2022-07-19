@@ -121,9 +121,6 @@ class PTB_XL(Dataset):
         return sample
 
 
-
-
-
 def init_train_val_dataset():
     train_dataset = PTB_XL('train')
     val_dataset = PTB_XL('val')
@@ -196,14 +193,6 @@ def handle_request(sock, getid, content):
 def serverHandler(conn):
     while True:
         recieve_request(conn)
-
-def grad_postprocessing(grad):
-    grad_new = grad.numpy()
-    for a in range(64):
-        #scaler.fit(grad[a])
-        grad_new[a] = scaler.inverse_transform(grad[a])
-    grad_new = torch.DoubleTensor(grad_new).to(device)
-    return grad_new
 
 
 def train_epoch(s, pretraining):
@@ -428,6 +417,7 @@ def val_stage(s, pretraining=0):
     
     if not pretraining:
         client.to('cpu') #free up some gpu memory
+        torch.cuda.empty_cache()
         Communication.send_msg(s, 3, 0)
 
 
@@ -513,6 +503,9 @@ def initialize_model(s, msg):
 
 
 def initIID():
+    """
+    Data loading
+    """
     global X_train, X_val, y_val, y_train, y_test, X_test
     sampling_frequency = 100
     datafolder = ptb_path
@@ -551,6 +544,10 @@ def initIID():
 
 
 def init_nonIID():
+    """
+    Initializing the non-IID data, by dividing the training data into the 5 different classes
+    and assigning each client a different dataset/class
+    """
     global X_train, X_val, y_val, y_train, y_test, X_test
     norm, mi, sttc, hyp, cd = [],[],[],[],[]
     for a in range(len(y_train)):
@@ -642,6 +639,11 @@ def init_nonIID():
             y_train = np.concatenate((y_train, label_mi), axis=0)
 
 def label_class(label, clas):
+    """
+    Append the label, matching the sample in the non-IID data case
+    param label: label
+    param clas: sample class
+    """
     if clas == 0:
         if label[0] == 1:
             label_sttc.append(label)
@@ -664,6 +666,9 @@ def label_class(label, clas):
             return True
 
 def init_nn_parameters():
+    """
+    initialize device, client model, optimizer, loss and decoder
+    """
     global device
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     if (torch.cuda.is_available()):
@@ -698,11 +703,12 @@ def init_nn_parameters():
 
     if autoencoder:
         global encode
-        encode = Models.Encode()
-        print("Start Encoder")
-        if autoencoder_train == 0:
-            if model == 'CNN': encode.load_state_dict(torch.load("client/convencoder_medical.pth"))
-            if model == 'TCN': encode.load_state_dict(torch.load("convencoder_TCN.pth"))
+        if model == 'CNN': 
+            encode = Models.Encode()
+            if autoencoder_train == 0: encode.load_state_dict(torch.load("client/convencoder_medical.pth"))
+        if model == 'TCN': 
+            encode = Models.EncodeTCN()
+            if autoencoder_train == 0: encode.load_state_dict(torch.load("client/convencoder_TCN.pth"))
         encode.eval()
         print("Start eval")
         encode.double().to(device)
