@@ -36,6 +36,7 @@ mech = data["mechanism"]
 pretrain_active = data["pretrain_active"]
 update_mechanism = data["update_mechanism"]
 model = data["Model"]
+autoencoder_train = data["autoencoder_train"]
 
 data_send_per_epoch = 0
 client_weights = 0
@@ -277,7 +278,7 @@ def calc_gradients(conn, msg):
         if train_loss > update_treshold:
             update = True
     else:
-        if random_number_between_0_and_1 < update_mchanism(epoch=epoch, loss = train_loss): #dropout_mechanisms(mechanism=mech, epoch=epoch):
+        if random_number_between_0_and_1 < dropout_mechanisms(mechanism=mech, epoch=epoch):
             update = True
     if update:
         client_grad_send = client_grad.detach().clone()
@@ -303,27 +304,6 @@ def calc_gradients(conn, msg):
     # print("msg: ", msg["train_loss"])
     send_msg(conn, msg)
 
-
-def update_mchanism(loss, epoch):
-    def sigmoid(x):
-        return 1 / (1 + np.exp(-x))
-    a = sigmoid((-epoch + num_epochs/2) / 3)
-    #
-    global prevloss_total, batches_total, average_loss_previous_epoch, lastepoch
-
-    if epoch > lastepoch and epoch > 0:
-        average_loss_previous_epoch = prevloss_total / batches_total
-        prevloss_total = 0
-        batches_total = 0
-    
-    lastepoch = epoch
-    prevloss_total += loss
-    batches_total += 1
-
-    if loss < average_loss_previous_epoch:
-        return 1
-    else:
-        return 0
 
 
 def epoch_is_finished(conn, msg):
@@ -451,6 +431,9 @@ def main():
         global decode
         if model == 'CNN': decode = ModelsServer.Decode()
         if model == 'TCN': decode = ModelsServer.DecodeTCN()
+        if autoencoder_train==0:
+            if model == 'CNN': decode.load_state_dict(torch.load("server/convdecoder_medical.pth"))
+            if model == 'TCN': decode.load_state_dict(torch.load("server/convdecoder_TCN.pth"))
         decode.eval()
         decode.double().to(device)
         #print("Load decoder parameters complete.")
@@ -509,3 +492,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+Encode

@@ -1,7 +1,7 @@
 {
     "host": "134.130.35.106",
-    "port": 10093,
-    "max_recv": 4096,
+    "port": 10074,
+    "max_recv": 8192, 
 
     "batchsize": 64,
     "learningrate": 0.001, 
@@ -10,7 +10,8 @@
     "Model": "TCN",
     "(Comment): For Model, TCN and CNN are viable": 0,
 
-    "autoencoder": 0,
+    "autoencoder": 1,
+    "autoencoder_train": 0,
     "count_flops": 0,
 
     "epochs": 30,
