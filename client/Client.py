@@ -43,6 +43,8 @@ port = data["port"]
 max_recv = data["max_recv"]
 autoencoder = data["autoencoder"]
 count_flops = data["count_flops"]
+autoencoder_train = data["autoencoder_train"]
+deactivate_train_after_num_epochs = 50
 model = data["Model"]
 num_classes = data["num_classes"]
 
@@ -67,6 +69,7 @@ def print_json():
     print("Getting the metadata port: ", port)
     print("Getting the metadata batchsize: ", batchsize)
     print("Autoencoder: ", autoencoder)
+    print("Autoencoder train: ", autoencoder_train)
     print("count_flops: ", count_flops)
 
 
@@ -173,6 +176,11 @@ def train_epoch(s, content):
     global epoch
     epoch += 1
     flops_counter.reset()
+
+    AE_train_active = 0
+    if epoch < deactivate_train_after_num_epochs:
+        if autoencoder_train:
+            AE_train_active = 1
 
     Communication.reset_tracker()#Resets all communication trackers (MBs send/recieved...)
 
@@ -556,6 +564,9 @@ def main():
         global encode
         if model == 'CNN': encode = Models.Encode()
         if model == 'TCN': encode = Models.EncodeTCN()
+        if autoencoder_train == 0:
+            if model == 'CNN': encode.load_state_dict(torch.load("client/convencoder_medical.pth"))
+            if model == 'TCN': encode.load_state_dict(torch.load("convencoder_TCN.pth"))
         print("Start Encoder")
         encode.eval()
         print("Start eval")
