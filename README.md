@@ -9,7 +9,7 @@ Here's a brief overview of how you can use this project to run split learning on
 
 ### Download the dataset
 The PTB=XL dataset can be downloaded from 
-[link](https://physionet.org/content/ptb-xl/1.0.1/). download and unpack the zip file. Place it with its original name "ptb-xl-a-large-publicly..." in the working directory
+[link](https://physionet.org/content/ptb-xl/1.0.3/). download and unpack the zip file. Place it with its original name "ptb-xl-a-large-publicly..." in the working directory
 
 ### Set configurations
 

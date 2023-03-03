@@ -22,8 +22,8 @@ cwd = os.path.dirname(os.path.abspath(__file__))
 cwd = os.path.dirname(cwd)
 mlb_path = os.path.join(cwd, "mlb.pkl")
 scaler_path = os.path.join(cwd)
-ptb_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1/")
-output_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1", "output/")
+ptb_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.3/")
+output_path = os.path.join(cwd, "ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.3", "output/")
 path_ecg_synthetic = os.path.join(cwd, "..", "ECG-Synthetic")
 import utils
 

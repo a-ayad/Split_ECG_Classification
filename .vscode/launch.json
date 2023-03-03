@@ -1,0 +1,35 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Server",
+            "type": "python",
+            "request": "launch",
+            "program": "./server/Server.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Run Single Client",
+            "type": "python",
+            "request": "launch",
+            "program": "./client/Client.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Run Multiple Clients",
+            "type": "python",
+            "request": "launch",
+            "program": "./client/ClientMulti.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--num_clients", "5"
+            ]
+        }
+    ]
+}

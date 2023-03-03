@@ -284,3 +284,14 @@ def apply_standardizer(X, ss):
         X_tmp.append(ss.transform(x.flatten()[:, np.newaxis]).reshape(x_shape))
     X_tmp = np.array(X_tmp)
     return X_tmp
+
+
+def split_batch(batch):
+    """Gets a pytorch tensor of shape (batch_size, ...). 
+    Transforms the tensor to a numpy array and splits it into a list of 
+    numpy arrays of shape (batch_size, 1, ...).
+    """
+    batch = batch.cpu().detach().numpy()	
+    batch = np.split(batch, batch.shape[0], axis=0)	
+    batch = [np.squeeze(t, axis=0) for t in batch]		
+    return batch	
