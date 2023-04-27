@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "./server/Server.py",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": false
         },
         {
             "name": "Run Single Client",
@@ -18,7 +18,7 @@
             "request": "launch",
             "program": "./client/Client.py",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": false
         },
         {
             "name": "Run Multiple Clients",
@@ -26,7 +26,7 @@
             "request": "launch",
             "program": "./client/ClientMulti.py",
             "console": "integratedTerminal",
-            "justMyCode": true,
+            "justMyCode": false,
             "args": [
                 "--num_clients", "5"
             ]

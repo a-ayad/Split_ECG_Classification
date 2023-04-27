@@ -85,33 +85,15 @@ class PTB_XL(Dataset):
 
 
 def init_train_val_dataset():
+    raw_dataset = PTB_XL("raw")
     train_dataset = PTB_XL("train")
     val_dataset = PTB_XL("val")
     if IID:
-        train_1, rest1 = torch.utils.data.random_split(
-            train_dataset, [3853, 15414], generator=torch.Generator().manual_seed(42)
+        split = torch.utils.data.random_split(
+            raw_dataset, [len(raw_dataset) // 5] * 5, generator=torch.Generator().manual_seed(42)
         )
-        train_2, rest2 = torch.utils.data.random_split(
-            rest1, [3853, 11561], generator=torch.Generator().manual_seed(42)
-        )
-        train_3, rest3 = torch.utils.data.random_split(
-            rest2, [3853, 7708], generator=torch.Generator().manual_seed(42)
-        )
-        train_4, train_5 = torch.utils.data.random_split(
-            rest3, [3853, 3855], generator=torch.Generator().manual_seed(42)
-        )
-        if client_num == 1:
-            train_dataset = train_1
-        if client_num == 2:
-            train_dataset = train_2
-        if client_num == 3:
-            train_dataset = train_3
-        if client_num == 4:
-            train_dataset = train_4
-        if client_num == 5:
-            train_dataset = train_5
+        train_dataset = split[client_num - 1]
     if pretrain_this_client:
-        raw_dataset = PTB_XL("raw")
         print("len raw dataset", len(raw_dataset))
         pretrain_dataset, no_dataset = torch.utils.data.random_split(
             raw_dataset,
@@ -125,7 +107,6 @@ def init_train_val_dataset():
         )
 
     if mixed_dataset:
-        raw_dataset = PTB_XL("raw")
         print("len raw dataset", len(raw_dataset))
         pretrain_dataset, no_dataset = torch.utils.data.random_split(
             raw_dataset,
@@ -189,8 +170,9 @@ def serverHandler(conn):
 def train_epoch(s, pretraining):
     # Initializaion of a bunch of variables
     global client
-    torch.cuda.empty_cache()
-    client.to("cuda:0")
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    client.to(device)
     global data_send_per_epoch, data_recieved_per_epoch, data_send_per_epoch_total, data_recieved_per_epoch_total
     data_send_per_epoch, data_recieved_per_epoch = 0, 0
     correct_train, total_train, train_loss, loss_grad_total = 0, 0, 0, 0
@@ -320,15 +302,15 @@ def train_epoch(s, pretraining):
         if client_grad == "abort":  # If the client update got aborted
             batches_aborted += 1
 
-            if record_latent_space:
-                sample["grad_client"] = utils.split_batch(torch.zeros_like(client_grad))
+            #if record_latent_space:
+            #    sample["grad_client"] = utils.split_batch(torch.zeros_like(client_grad))
 
         else:
             flops_counter.read_counter("rest")
             client_output_backprop.backward(client_grad_decode)  # Backpropagation
 
-            if record_latent_space:
-                sample["grad_client"] = utils.split_batch(client_grad_decode)
+            #if record_latent_space:
+            #    sample["grad_client"] = utils.split_batch(client_grad_decode)
 
             optimizer.step()
             flops_counter.read_counter("backprop")
@@ -558,7 +540,7 @@ def val_stage(s, pretraining=0):
                     "stage": ["val"] * val_batchsize,
                     "corrupted_point": utils.split_batch(point_mask),
                     "corrupted_label": utils.split_batch(label_mask),
-                    "grad_client": utils.split_batch(torch.zeros_like(output_val)),
+                    #"grad_client": utils.split_batch(torch.zeros_like(output_val)),
                 }
                 df_batch = pd.DataFrame(sample)
                 latent_space_image = pd.concat(
@@ -610,15 +592,12 @@ def val_stage(s, pretraining=0):
 
     if not pretraining:
         client.to("cpu")  # free up some gpu memory
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         Communication.send_msg(s, 3, 0)
 
     # Save current latent space image
-    with open(
-        os.path.join(latent_space_dir, f"epoch_{epoch}.pickle"), "wb"
-    ) as handle:
-        pickle.dump(latent_space_image, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        
+    latent_space_image.to_pickle(os.path.join(latent_space_dir, f"epoch_{epoch}.pickle"))
     latent_space_image = reset_latent_space_image(latent_space_image)
 
 def test_stage(s, epoch):
@@ -627,7 +606,8 @@ def test_stage(s, epoch):
     :param s: socket
     :param epoch: current epoch
     """
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     client.to(device)
 
     loss_test = 0.0
@@ -925,8 +905,9 @@ def init_nn_parameters():
     seed = 0
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
@@ -980,7 +961,7 @@ def reset_latent_space_image(df=None):
             "step",
             "epoch",
             "stage",
-            "grad_client",
+            #"grad_client",
             "loss",
             "server_output",
         ]
@@ -1033,7 +1014,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Client")
     parser.add_argument("--client_num", type=int, default=1)
-    parser.add_argument("--IID", type=int, default=0)
+    parser.add_argument("--IID", type=int, default=1)
     parser.add_argument("--average_setting", type=str, default="micro")
     parser.add_argument("--weights_and_biases", type=int, default=1)
     args = parser.parse_args()
@@ -1079,19 +1060,22 @@ def main():
         )
         os.makedirs(latent_space_dir, exist_ok=True)
         latent_space_image = reset_latent_space_image()
-        metadata = (
-            {
+            
+        # Check if a file callet metadata.pickle exists in the latent_space_dir
+        # If not, create a new file and write the metadata to it
+        # Otherwise do nothing
+        metadata_path = os.path.join(cwd, "latent_space", exp_name, "metadata.pickle")
+        if not os.path.isfile(metadata_path):	
+            metadata = {
+                "num_clients": data["nr_clients"],
                 "exp_name": exp_name,
-                "client_num": client_num,
-                "is_malicious": data["malicious_client_id"] == client_num,
+                "malicious_client_id": data["malicious_client_id"],
                 "batchsize": batchsize,
                 "random_point_prob": data["random_point_prob"],
                 "random_label_prob": data["random_label_prob"],
-            },
-        )
-        
-        with open(os.path.join(latent_space_dir, "metadata.pickle"), "wb") as handle:
-            pickle.dump(metadata, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            }
+            with open(metadata_path, "wb") as handle:	
+                pickle.dump(metadata, handle, protocol=pickle.HIGHEST_PROTOCOL)	
 
     if client_num == 1:
         pretrain_this_client = data["pretrain_active"]
