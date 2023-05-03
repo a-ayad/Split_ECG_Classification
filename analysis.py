@@ -37,51 +37,65 @@ def get_unique_labels(df):
     un = np.take_along_axis(un, ind, axis=0)
     return np.column_stack((ul, un))
 
+# Converts a binary number to a decimal number
+def binary_to_decimal(n):
+    return np.sum(n * 2**np.arange(n.size)[::-1])	
+
 # Gets a float as input and returns if it is a power of 2
 def is_power_of_2(n):
+    if not isinstance(n, (int, float)):
+        n = np.sum(n * 2**np.arange(n.size)[::-1])
+        
     n = int(n)	
     return (n & (n - 1) == 0) and n != 0
 
 # Gets a binary number and returns if the ith bit is 1
 def get_bit(n, i):	
+    if not isinstance(n, (int, float)):
+        n = np.sum(n * 2**np.arange(n.size)[::-1])
+    n = int(n)
     return ((n & (1 << i)) >> i) == 1
 
 def split_labels(df, split="min"):
     n_bits = df.label.values[0].size
-    df.label = df.label.apply(lambda x: np.sum(x * 2**np.arange(x.size)[::-1]))
+    
+    if not split.startswith("knn"):
+        df.label = df.label.apply(binary_to_decimal)
     
     if split == "min":
         df_split = pd.DataFrame()
         for i in range(0, n_bits):
-            subset = df[df.label.apply(lambda x: get_bit(int(x), i))].copy()
+            subset = df[df.label.apply(lambda x: get_bit(x, i))].copy()
             subset.label = 2**i
             df_split = pd.concat([df_split, subset], axis=0, ignore_index=True)
     elif split == "max":
-        df_split = df[df.label.apply(lambda x: is_power_of_2(int(x)))]
+        df_split = df[df.label.apply(is_power_of_2)]
     elif split == "dec":
         df_split = df.copy()
     elif split == "minmax":
-        df_split = df[df.label.apply(lambda x: is_power_of_2(int(x)))]
-        df_split_neg = df[df.label.apply(lambda x: not is_power_of_2(int(x)))].copy()
+        df_split = df[df.label.apply(is_power_of_2)]
+        df_split_neg = df[df.label.apply(is_power_of_2)].copy()
         df_split_neg.label = 0
         df_split = pd.concat([df_split, df_split_neg], axis=0, ignore_index=True)
     elif split.startswith("knn"):
-        k = int(split.split("knn")[1])
-        
-        df_X = df[df.label.apply(lambda x: is_power_of_2(int(x)))]
-        df_X0 = df[df.label.apply(lambda x: not is_power_of_2(int(x)))].copy()
-        df_X0.label = 0
-        
-        X = pool_latent_vectors(df_X.client_output.values.tolist(), pooling=None)
-        X0 = pool_latent_vectors(df_X0.client_output.values.tolist(), pooling=None)
-        y = df_X.label.values
-        neigh = KNeighborsClassifier(n_neighbors=k)
-        neigh.fit(X, y)
-        
-        df_X0.label = neigh.predict(X0)
-        df_split = pd.concat([df_X, df_X0], axis=0, ignore_index=True)
+        df_split = knn_label_splitting(df, split)
         
     return df_split
+
+def knn_label_splitting(df, split):
+    params = split.split("_")
+        
+    df_X = df[df.label.apply(is_power_of_2)].copy()
+    df_X.label = df_X.label.apply(binary_to_decimal)
+    df_X0 = df[~df.label.apply(is_power_of_2)].copy()
+
+    X = pool_latent_vectors(df_X.client_output.values.tolist(), pooling=None)
+    X0 = pool_latent_vectors(df_X0.client_output.values.tolist(), pooling=None)
+    neigh = KNeighborsClassifier(n_neighbors=int(params[1]), metric=params[2])
+    neigh.fit(X, df_X.label)
+
+    df_X0.label = 2 ** np.argmax(neigh.predict_proba(X0) * np.array(df_X0.label.to_list()), axis=1)
+    return pd.concat([df_X, df_X0], axis=0, ignore_index=True)
     
 def per_label_similarities(epoch, base_path, similarities, aggregate=True, pooling="average", split="min"):	
     epoch_path = os.path.join(base_path, "epoch_" + str(epoch) + ".pickle")
@@ -138,7 +152,7 @@ def plot_similarity(df, label, similarity):
     plt.show()	
     
 # Plots all similarity measures in one plot for a given label.
-def plot_all_similarities(df, label, moment="mean", similarities=["euclidean", "cosine"]):	
+def plot_all_similarities(df_all, moment="mean", similarities=["euclidean", "cosine"]):	
     if moment == "mean":
         num_moment = 0
     elif moment == "std" or moment == "var":
@@ -146,21 +160,29 @@ def plot_all_similarities(df, label, moment="mean", similarities=["euclidean", "
     elif moment == "median":
         num_moment = 2	
         
-    fig, ax = plt.subplots(2, 3, figsize=(20, 10), facecolor="white", constrained_layout=True)
-    fig.suptitle("Similarity Measures for Label: {}".format(label), size=16)
-    df = df[df["label"] == label]
-    for idx, similarity in enumerate(similarities):
-        for client_id, df_client in df.groupby("client_id"):
-            df_client = df_client.sort_values("epoch")
-            df_client[similarity] = df_client[similarity].apply(lambda x: x[num_moment])
-            if moment == "std":
-                df_client[similarity] = df_client[similarity].apply(lambda x: np.sqrt(x))
-            ax[idx // 3, idx % 3].plot(df_client["epoch"], df_client[similarity], label="Client {}".format(client_id))
-        ax[idx // 3, idx % 3].set_title(similarity)
-        ax[idx // 3, idx % 3].set_xlabel("Epoch")
-        ax[idx // 3, idx % 3].set_ylabel("Similarity")
-        ax[idx // 3, idx % 3].legend()
+    labels = list(df_all["label"].unique())
+    supfig = plt.figure(constrained_layout=True, figsize=(20, 10 * len(labels)))
+    supfig.suptitle(f"Similarity Measures (per-class {moment})", fontsize='xx-large')
+    subfigs = supfig.subfigures(len(labels), 1, facecolor="white", hspace=0.05)
+    
+
+    for fig_idx, subfig in enumerate(subfigs.flat):
+        subfig.suptitle("Label: {}".format(labels[fig_idx]), fontsize='x-large')
+        ax = subfig.subplots(2, 3)
+        df = df_all[df_all["label"] == labels[fig_idx]]
+        for idx, similarity in enumerate(similarities):
+            for client_id, df_client in df.groupby("client_id"):
+                df_client = df_client.sort_values("epoch")
+                df_client[similarity] = df_client[similarity].apply(lambda x: x[num_moment])
+                if moment == "std":
+                    df_client[similarity] = df_client[similarity].apply(lambda x: np.sqrt(x))
+                ax[idx // 3, idx % 3].plot(df_client["epoch"], df_client[similarity], label="Client {}".format(client_id))
+            ax[idx // 3, idx % 3].set_title(similarity)
+            ax[idx // 3, idx % 3].set_xlabel("Epoch")
+            ax[idx // 3, idx % 3].set_ylabel("Similarity")
+            ax[idx // 3, idx % 3].legend()
     plt.show()
+
 
 def init_subplot(dim, nrows, ncols):
     if dim == 2:
@@ -246,9 +268,9 @@ def per_epoch_tsne(epochs, base_path, num_clients, params, pooling=None, pca=Non
     plt.show()
     return fig, ax
 
-def loss_contributions(base_path, moment="mean"):
+def loss_contributions(base_path, metadata, epochs=30, moment="mean"):
     df_clients_loss = pd.DataFrame(columns=["client_id", "epoch", "loss"])
-    for idx in tqdm.tqdm(range(1, metadata["num_clients"] + 1)):
+    for idx in tqdm(range(1, metadata["num_clients"] + 1)):
         client_path = os.path.join(base_path, "client_" + str(idx))
         for epoch in range(1, epochs + 1):
             df = pd.read_pickle(os.path.join(client_path, "epoch_{}.pickle".format(epoch)))
