@@ -1044,10 +1044,10 @@ def main():
 
     # model poisoning parameters
     random_point_prob = (
-        data["random_point_prob"] if client_num == data["malicious_client_id"] else 0.0
+        data["random_point_prob"] if client_num in data["malicious_client_ids"] else 0.0
     )
     random_label_prob = (
-        data["random_label_prob"] if client_num == data["malicious_client_id"] else 0.0
+        data["random_label_prob"] if client_num in data["malicious_client_ids"] else 0.0
     )
 
     # latent space analysis variables & dir for files
@@ -1069,7 +1069,7 @@ def main():
             metadata = {
                 "num_clients": data["nr_clients"],
                 "exp_name": exp_name,
-                "malicious_client_id": data["malicious_client_id"],
+                "malicious_client_ids": data["malicious_client_ids"],
                 "batchsize": batchsize,
                 "random_point_prob": data["random_point_prob"],
                 "random_label_prob": data["random_label_prob"],
@@ -1085,9 +1085,10 @@ def main():
     pretrain_epochs = data["pretrain_epochs"]
     IID_percentage = data["IID_percentage"]
     autoencoder_train = data["autoencoder_train"]
+    intent = "malicious" if client_num in data["malicious_client_ids"] else "honest"
 
     if weights_and_biases:
-        wandb.init(project="SL_Security", entity="mohkoh", name=exp_name)
+        wandb.init(project="SL_Security", entity="mohkoh",group=exp_name, name=f"{intent}_client_{client_num}")
         wandb.init(
             config={
                 "learning_rate": lr,
