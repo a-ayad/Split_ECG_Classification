@@ -1,3 +1,5 @@
+import itertools
+import time
 import numpy as np
 import os
 from torch.nn.functional import max_pool1d, avg_pool1d
@@ -15,128 +17,7 @@ from matplotlib import ticker
 import matplotlib as mpl
 from contextlib import closing
 from tqdm.notebook import tqdm
-import math  
-
-# Gets a numpy array as input. Returns a numpy array with all possible 2-combinations of the input. The order of the combinations is not important and combinations with the same elements are not included.
-def get_similarities(X, similarity_functions):	
-    similarities = {}
-    for s in similarity_functions:
-        if X.shape[0] == 1:
-            similarities[s] = np.array([0])
-        else:
-            similarities[s] = sp.distance.pdist(X, s)
-    return similarities
-
-def get_unique_labels(df):	
-    decimal = df.label.apply(lambda x: np.sum(x * 2**np.arange(x.size)[::-1]))
-    #decimal = df.label
-    ul = decimal.unique()
-    un = decimal.value_counts().values
-    ind = np.argsort(ul)
-    ul = np.take_along_axis(ul, ind, axis=0)
-    un = np.take_along_axis(un, ind, axis=0)
-    return np.column_stack((ul, un))
-
-# Converts a binary number to a decimal number
-def binary_to_decimal(n):
-    return np.sum(n * 2**np.arange(n.size)[::-1])	
-
-# Gets a float as input and returns if it is a power of 2
-def is_power_of_2(n):
-    if not isinstance(n, (int, float)):
-        n = np.sum(n * 2**np.arange(n.size)[::-1])
-        
-    n = int(n)	
-    return (n & (n - 1) == 0) and n != 0
-
-# Gets a binary number and returns if the ith bit is 1
-def get_bit(n, i):	
-    if not isinstance(n, (int, float)):
-        n = np.sum(n * 2**np.arange(n.size)[::-1])
-    n = int(n)
-    return ((n & (1 << i)) >> i) == 1
-
-def split_labels(df, split="min"):
-    n_bits = df.label.values[0].size
-    
-    if not split.startswith("knn"):
-        df.label = df.label.apply(binary_to_decimal)
-    
-    if split == "min":
-        df_split = pd.DataFrame()
-        for i in range(0, n_bits):
-            subset = df[df.label.apply(lambda x: get_bit(x, i))].copy()
-            subset.label = 2**i
-            df_split = pd.concat([df_split, subset], axis=0, ignore_index=True)
-    elif split == "max":
-        df_split = df[df.label.apply(is_power_of_2)]
-    elif split == "dec":
-        df_split = df.copy()
-    elif split == "minmax":
-        df_split = df[df.label.apply(is_power_of_2)]
-        df_split_neg = df[df.label.apply(is_power_of_2)].copy()
-        df_split_neg.label = 0
-        df_split = pd.concat([df_split, df_split_neg], axis=0, ignore_index=True)
-    elif split.startswith("knn"):
-        df_split = knn_label_splitting(df, split)
-        
-    return df_split
-
-def knn_label_splitting(df, split):
-    params = split.split("_")
-        
-    df_X = df[df.label.apply(is_power_of_2)].copy()
-    df_X.label = df_X.label.apply(binary_to_decimal)
-    df_X0 = df[~df.label.apply(is_power_of_2)].copy()
-
-    X = pool_latent_vectors(df_X.client_output.values.tolist(), pooling=None)
-    X0 = pool_latent_vectors(df_X0.client_output.values.tolist(), pooling=None)
-    neigh = KNeighborsClassifier(n_neighbors=int(params[1]), metric=params[2])
-    neigh.fit(X, df_X.label)
-
-    df_X0.label = 2 ** np.argmax(neigh.predict_proba(X0) * np.array(df_X0.label.to_list()), axis=1)
-    return pd.concat([df_X, df_X0], axis=0, ignore_index=True)
-    
-def per_label_similarities(epoch, base_path, similarities, aggregate=True, pooling="average", split="min"):	
-    epoch_path = os.path.join(base_path, "epoch_" + str(epoch) + ".pickle")
-    samples = pd.read_pickle(epoch_path)
-    samples = split_labels(samples, split)
-    samples = samples.groupby(["label"])
-    df_epoch = pd.DataFrame(columns=["epoch", "label"] + similarities)
-    for label, group in samples:
-        latent_vectors = pool_latent_vectors(group.client_output.values.tolist(), pooling=pooling)
-        sim = get_similarities(latent_vectors, similarities)
-        sim["epoch"] = epoch
-        sim["label"] = label
-        df_epoch = pd.concat([df_epoch, pd.DataFrame([sim])], ignore_index=True)
-    if aggregate:
-        for s in similarities:
-            df_epoch[s] = df_epoch[s].apply(lambda x: (np.mean(x), np.var(x), np.median(x)))
-    return df_epoch
-
-def pool_latent_vectors(latent_vectors, pooling="average"):	
-    latent_vectors = np.array(latent_vectors)
-    if pooling == "max":
-        latent_vectors = max_pool1d(torch.from_numpy(latent_vectors), kernel_size=latent_vectors.shape[-1]).squeeze(-1).numpy()
-    elif pooling == "average":
-        latent_vectors = avg_pool1d(torch.from_numpy(latent_vectors), kernel_size=latent_vectors.shape[-1]).squeeze(-1).numpy()
-    else:
-        latent_vectors = np.reshape(latent_vectors, (latent_vectors.shape[0], int(latent_vectors.shape[1]*latent_vectors.shape[2])))    
-    return latent_vectors
-
-def compute_in_parallel(base_path, epochs, similarities, num_workers=5, save_path=None, aggregate=True, pooling="average", split="min"):	
-    df = pd.DataFrame(columns=["epoch", "label"] + similarities)
-    partial_per_label_similarities = partial(per_label_similarities, base_path=base_path, similarities=similarities, aggregate=aggregate, pooling=pooling, split=split)
-    with closing(multiprocessing.Pool(processes=num_workers)) as p:
-        with tqdm(total=epochs) as pbar:
-            for r in p.imap_unordered(partial_per_label_similarities, np.arange(1, epochs+1)):
-                df = pd.concat([df, r], ignore_index=True, copy=False)
-                pbar.update()
-    p.join()
-    
-    if save_path:
-        df.to_pickle(os.path.join(base_path, save_path))
-    return df
+import math 
 
 # Plots the similarity measures over epochs for each client for a given label.
 def plot_similarity(df, label, similarity):
@@ -268,24 +149,6 @@ def per_epoch_tsne(epochs, base_path, num_clients, params, pooling=None, pca=Non
     plt.show()
     return fig, ax
 
-def loss_contributions(base_path, metadata, epochs=30, moment="mean"):
-    df_clients_loss = pd.DataFrame(columns=["client_id", "epoch", "loss"])
-    for idx in tqdm(range(1, metadata["num_clients"] + 1)):
-        client_path = os.path.join(base_path, "client_" + str(idx))
-        for epoch in range(1, epochs + 1):
-            df = pd.read_pickle(os.path.join(client_path, "epoch_{}.pickle".format(epoch)))
-            if moment == "mean":
-                loss_moment = df.loss.mean()
-            elif moment == "std" or moment == "var":
-                loss_moment = df.loss.var()
-                if moment == "std":
-                    loss_moment = np.sqrt(loss_moment)
-            elif moment == "sum":
-                loss_moment = df.loss.sum()	
-            elif moment == "median":
-                loss_moment = df.loss.median()
-            df_clients_loss.loc[len(df_clients_loss), df_clients_loss.columns] = [idx, epoch, loss_moment]
-    return df_clients_loss
 
 # Gets a dataframe with columns client_id, epoch, and loss. Plots the loss over epochs for each client.
 def plot_loss(df, moment="mean"):	

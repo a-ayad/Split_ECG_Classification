@@ -35,6 +35,18 @@
     "exp_name": "multi_client_two_malicious_0.25_0.25",
     "malicious_client_ids": [1, 2],
     "random_point_prob": 0.25,
-    "random_label_prob": 0.25
+    "random_label_prob": 0.25,
+
+    "detect_anomalies": true,
+    "detection_threshold": 0.5,
+    "detection_window": 5,
+    "detection_start": 5,
+    "detection_params": {
+        "method": "similarity",
+        "similarities": ["cosine"],
+        "pooling": "average",
+        "split": "knn_10_euclidean",
+        "aggregate": "mean"
+    }
 }
 

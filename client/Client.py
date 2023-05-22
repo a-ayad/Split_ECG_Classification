@@ -263,6 +263,9 @@ def train_epoch(s, pretraining):
             "client_output_train_without_ae": client_output_train_not_encoded,
             "label_train": label_train,  # concat_labels,
             "batchsize": batchsize,
+            "epoch": epoch,
+            "stage": "train",
+            "client_id": client_num,
         }
 
         if record_latent_space:
@@ -513,10 +516,14 @@ def val_stage(s, pretraining=0):
             output_val = client(x_val, drop=False)
             if autoencoder:
                 output_val = encode(output_val)
-
+            val_batchsize = x_val.shape[0]
             msg = {
                 "client_output_val/test": output_val,
                 "label_val/test": label_val,
+                "epoch": epoch,
+                "stage": "val",
+                "client_id": client_num,
+                "batchsize": val_batchsize,
             }
             Communication.send_msg(s, 1, msg)
             msg = Communication.recieve_msg(s)
@@ -525,7 +532,6 @@ def val_stage(s, pretraining=0):
             total_val_nr += 1
 
             if record_latent_space:
-                val_batchsize = x_val.shape[0]
                 sample = {
                     "server_output": utils.split_batch(output_val_server),
                     "label": utils.split_batch(label_val),

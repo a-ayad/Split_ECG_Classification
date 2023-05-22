@@ -17,6 +17,10 @@ from sklearn.preprocessing import MinMaxScaler
 import zlib
 import os
 import ModelsServer
+import pandas as pd
+from security.analysis import *
+import security.utils as utils
+from tqdm import tqdm
 
 # load data from json file
 #f = open('server/parameter_server.json', )
@@ -42,7 +46,46 @@ data_send_per_epoch = 0
 client_weights = 0
 client_weights_available = 0
 
+detect_anomalies = data["detect_anomalies"]
+# global latent_space_image
+# global detection_scores
+# global detection_threshold
 
+if detect_anomalies:
+    latent_space_image = utils.reset_latent_space_image()
+    detection_scores = pd.DataFrame(columns=["client_id", "epoch", "stage", "score"])
+    detection_threshold = data["detection_threshold"]
+    detection_params = data["detection_params"]
+    detection_window = data["detection_window"]
+    detection_start = data["detection_start"]
+
+def update_detection_scores(latent_space_image, detection_scores, epoch, stage="val"):
+    latent_space_image = latent_space_image[latent_space_image["stage"] == stage]
+    
+    df_scores = pd.DataFrame()
+    for client_id in tqdm(range(1, numclients + 1), desc="Client Detection Scores"):
+        client_score = per_epoch_scores(epoch, client_id, df=latent_space_image, **detection_params)
+        client_loss = latent_space_image[latent_space_image["client_id"] == client_id]["loss"].sum()
+        client_score[detection_params["similarities"]] = (1 / client_score[detection_params["similarities"]]).multiply(client_loss, axis=0)
+        df_scores = pd.concat([df_scores, client_score], ignore_index=True)
+        
+    df_scores = df_scores.groupby(["client_id", "epoch"]).mean().reset_index()
+    df_scores = df_scores.groupby("epoch").apply(lambda x: medianAbsoluteDeviation(x, similarities=detection_params["similarities"]))
+    df_scores = df_scores[["client_id", "epoch"] + detection_params["similarities"]]
+    
+    detection_scores = pd.concat([detection_scores, df_scores], axis=0, ignore_index=True)
+        
+    return detection_scores
+
+def is_malicious(client_id):
+    if len(detection_scores) == 0:
+        return False
+    client_scores = detection_scores[detection_scores["client_id"] == client_id]
+    max_epoch = client_scores["epoch"].max()
+    if max_epoch < detection_start:
+        return False
+    window_scores = client_scores[client_scores["epoch"] >= max_epoch - detection_window]
+    return window_scores[detection_params["similarities"]].mean().mean() > detection_threshold
 
 def send_msg(sock, content):
     """
@@ -156,6 +199,25 @@ def get_testacc(conn, msg):
         loss_test = error(output_test, label_test)
         test_loss = loss_test.data
         correct_test = 0#torch.sum(output_test.argmax(dim=1) == label_test).item()
+        
+        # Malicious Client Detection
+        if detect_anomalies:
+            global latent_space_image
+            epoch = msg['epoch']
+            client_id = msg['client_id']
+            stage = msg['stage']
+            batchsize = msg['batchsize']
+            sample = {
+                "client_output": utils.split_batch(client_output_test),
+                "label": utils.split_batch(label_test),
+                "epoch": [epoch] * batchsize,
+                "stage": [stage] * batchsize,
+                "client_id": [client_id] * batchsize,
+                "loss": [loss_test.item()] * batchsize,
+            }
+            latent_space_image = pd.concat(
+                    [latent_space_image, pd.DataFrame(sample)], ignore_index=True
+                )
 
     msg = {"val/test_loss": test_loss,
            "correct_val/test": correct_test,
@@ -233,6 +295,7 @@ def calc_gradients(conn, msg):
     :param msg: the recieved data
     """
     global grad_available
+    global latent_space_image
     start_time_training = time.time()
     with torch.no_grad():
         client_output_train, client_output_train_without_ae, label_train, batchsize = msg['client_output_train'], msg['client_output_train_without_ae'], msg['label_train'], msg[
@@ -246,6 +309,7 @@ def calc_gradients(conn, msg):
     #client_output_train = Variable(client_output_train, requires_grad=True)
     #client_output_train_decode = decode(client_output_train)
     #encoder_grad = 0
+    
     optimizer.zero_grad()
     #splittensor = torch.split(client_output_train_decode, batchsize, dim=0)
 
@@ -258,6 +322,24 @@ def calc_gradients(conn, msg):
         lbl_train = label_train.to(device)  # [dc].to(device)
 
     loss_train = error(output_train, lbl_train)  # calculates cross-entropy loss
+    
+    # Malicious Client Detection
+    if detect_anomalies:
+        epoch = msg['epoch']
+        client_id = msg['client_id']
+        stage = msg['stage']
+        sample = {
+            "client_output": utils.split_batch(client_output_train_decode),
+            "label": utils.split_batch(label_train),
+            "epoch": [epoch] * batchsize,
+            "stage": [stage] * batchsize,
+            "client_id": [client_id] * batchsize,
+            "loss": [loss_train.item()] * batchsize,
+        }
+        latent_space_image = pd.concat(
+                [latent_space_image, pd.DataFrame(sample)], ignore_index=True
+            )
+    
     # train_loss = loss_train.data
     # loss_train = loss_train.to(device)
     loss_train.backward()  # backward propagation
@@ -313,7 +395,6 @@ def epoch_is_finished(conn, msg):
     """
     global epoch_finished
     epoch_finished = 1
-
 
 def initialize_client(conn):
     """
@@ -468,14 +549,23 @@ def main():
     
 
     print(connectedclients)
+    global latent_space_image
+    global detection_scores
     for epoch in range(num_epochs):
         for c, client in enumerate(connectedclients):
+            if is_malicious(c):
+                print("malicious client: ", c+1)
+                send_request(client, 4, 0)
+                recieve_msg(client)
+                continue
             print("init client: ", c+1)
             initialize_client(client)
             print("train_client: ", c+1)
             train_client_for_one_epoch(client)
             #print("test client: ", c + 1)
             #test_client(client, num_epochs)
+        detection_scores = pd.concat([detection_scores, update_detection_scores(latent_space_image, detection_scores, epoch=epoch)], ignore_index=True)
+        latent_space_image = utils.reset_latent_space_image(latent_space_image)
 
     for c, client in enumerate(connectedclients):
         print("test client: ", c + 1)
