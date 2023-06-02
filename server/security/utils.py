@@ -132,3 +132,12 @@ def medianAbsoluteDeviation(x, similarities):
     x[similarities] = exp_ad / exp_ad.sum()
     x[similarities] = ad / ad.sum()
     return x
+
+def softmaxScheduler(x, similarities):
+    x_t = torch.from_numpy(x[similarities].to_numpy().astype(np.float32))
+    v_min, v_max = x_t.min(), x_t.max()
+    new_min, new_max = -1, 1
+    x_t = (x_t - v_min)/(v_max - v_min)*(new_max - new_min) + new_min
+    x_t = torch.nn.functional.softmax(-x_t, dim=0) / (1/x_t.shape[0])
+    x[similarities] = x_t.numpy()
+    return x

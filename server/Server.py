@@ -53,39 +53,53 @@ detect_anomalies = data["detect_anomalies"]
 
 if detect_anomalies:
     latent_space_image = utils.reset_latent_space_image()
-    detection_scores = pd.DataFrame(columns=["client_id", "epoch", "stage", "score"])
+    detection_scores = pd.DataFrame()
     detection_threshold = data["detection_threshold"]
     detection_params = data["detection_params"]
+    detection_similarity = data["detection_similarity"]
     detection_window = data["detection_window"]
     detection_start = data["detection_start"]
+    detection_scheduler = data["detection_scheduler"]
 
 def update_detection_scores(latent_space_image, detection_scores, epoch, stage="val"):
     latent_space_image = latent_space_image[latent_space_image["stage"] == stage]
     
     df_scores = pd.DataFrame()
     for client_id in tqdm(range(1, numclients + 1), desc="Client Detection Scores"):
-        client_score = per_epoch_scores(epoch, client_id, df=latent_space_image, **detection_params)
+        client_score = per_epoch_scores(epoch, client_id, df=latent_space_image, similarities=[detection_similarity], **detection_params)
         client_loss = latent_space_image[latent_space_image["client_id"] == client_id]["loss"].sum()
-        client_score[detection_params["similarities"]] = (1 / client_score[detection_params["similarities"]]).multiply(client_loss, axis=0)
+        client_score[detection_similarity] = (1 / client_score[detection_similarity]).multiply(client_loss, axis=0)
         df_scores = pd.concat([df_scores, client_score], ignore_index=True)
-        
+    
     df_scores = df_scores.groupby(["client_id", "epoch"]).mean().reset_index()
-    df_scores = df_scores.groupby("epoch").apply(lambda x: medianAbsoluteDeviation(x, similarities=detection_params["similarities"]))
-    df_scores = df_scores[["client_id", "epoch"] + detection_params["similarities"]]
+    df_probs =  df_scores.groupby("epoch").apply(lambda x: softmaxScheduler(x, similarities=[detection_similarity]))   
+    df_scores = df_scores.groupby("epoch").apply(lambda x: medianAbsoluteDeviation(x, similarities=[detection_similarity]))
+    df_scores["prob"] = df_probs[detection_similarity]
+    df_scores = df_scores[["client_id", "epoch", "prob"] + [detection_similarity]]
     
     detection_scores = pd.concat([detection_scores, df_scores], axis=0, ignore_index=True)
         
     return detection_scores
 
-def is_malicious(client_id):
+def has_update(client_id):
     if len(detection_scores) == 0:
-        return False
+        return True
+    
+    max_epoch = detection_scores["epoch"].max()
+    
+    if not max_epoch > detection_start:
+        return True
+    
     client_scores = detection_scores[detection_scores["client_id"] == client_id]
-    max_epoch = client_scores["epoch"].max()
-    if max_epoch < detection_start:
-        return False
     window_scores = client_scores[client_scores["epoch"] >= max_epoch - detection_window]
-    return window_scores[detection_params["similarities"]].mean().mean() > detection_threshold
+    
+    if window_scores[detection_similarity].mean() > detection_threshold:
+        return False
+    elif detection_scheduler:
+        prob = window_scores["prob"].mean()
+        return np.random.uniform() < prob
+    else:
+        return True
 
 def send_msg(sock, content):
     """
@@ -324,8 +338,8 @@ def calc_gradients(conn, msg):
     loss_train = error(output_train, lbl_train)  # calculates cross-entropy loss
     
     # Malicious Client Detection
+    epoch = msg['epoch']
     if detect_anomalies:
-        epoch = msg['epoch']
         client_id = msg['client_id']
         stage = msg['stage']
         sample = {
@@ -346,7 +360,15 @@ def calc_gradients(conn, msg):
     client_grad_backprop = client_output_train_decode.grad  # .clone().detach()
     # print("client_grad_size: ", client_grad_backprop.size())
     client_grad = client_grad_backprop.detach().clone()
-    optimizer.step()
+    
+    if detect_anomalies:
+        update_server = has_update(client_id)
+    else:
+        update_server = True
+    
+    if update_server:
+        optimizer.step()
+        
     train_loss = loss_train.item()
     add_correct_train = 0  # torch.sum(output_train.argmax(dim=1) == lbl_train).item()
     add_total_train = len(lbl_train)
@@ -553,23 +575,20 @@ def main():
     global detection_scores
     for epoch in range(num_epochs):
         for c, client in enumerate(connectedclients):
-            if is_malicious(c):
-                print("malicious client: ", c+1)
-                send_request(client, 4, 0)
-                recieve_msg(client)
-                continue
             print("init client: ", c+1)
             initialize_client(client)
             print("train_client: ", c+1)
             train_client_for_one_epoch(client)
             #print("test client: ", c + 1)
             #test_client(client, num_epochs)
-        detection_scores = pd.concat([detection_scores, update_detection_scores(latent_space_image, detection_scores, epoch=epoch)], ignore_index=True)
-        latent_space_image = utils.reset_latent_space_image(latent_space_image)
+        if detect_anomalies:
+            detection_scores = update_detection_scores(latent_space_image, detection_scores, epoch=epoch)
+            latent_space_image = utils.reset_latent_space_image(latent_space_image)
 
-    for c, client in enumerate(connectedclients):
-        print("test client: ", c + 1)
-        test_client(client, num_epochs)
+    print("init client: ", numclients)
+    initialize_client(connectedclients[-1])
+    print("test client: ", numclients)
+    test_client(connectedclients[-1], num_epochs)
     time.sleep(15) #Waiting until Wandb sync is finished
         #t = Thread(target=clientHandler, args=(conn, addr))
         #print('Thread established')

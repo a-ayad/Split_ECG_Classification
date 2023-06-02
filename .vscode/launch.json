@@ -28,7 +28,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
-                "--num_clients", "5"
+                "--num_clients", "10"
             ]
         }
     ]

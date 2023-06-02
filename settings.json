@@ -1,6 +1,6 @@
 {
     "host": "localhost",
-    "port": 10074,
+    "port": 10076,
     "max_recv": 8192, 
 
     "batchsize": 64,
@@ -22,7 +22,7 @@
 
     
     "(Comment): To use multiple clients increase the nr_clients to more than 1": 0,
-    "nr_clients": 5,
+    "nr_clients": 10,
     "(Comment): Settings for non-IID & multiple clients:": 0,
     "num_classes": 1,
     "pretrain_active": 0,
@@ -31,22 +31,23 @@
     "IID_percentage": 0.1,
 
 
-    "record_latent_space": true,
-    "exp_name": "multi_client_two_malicious_0.25_0.25",
-    "malicious_client_ids": [1, 2],
-    "random_point_prob": 0.25,
-    "random_label_prob": 0.25,
+    "record_latent_space": false,
+    "exp_name": "10_C_6_M_LF_1.0",
+    "num_malicious": 6,
+    "data_poisoning_prob": 0.0,
+    "blending_factor": 0.66,
+    "label_flipping_prob": 1.0,
 
-    "detect_anomalies": true,
-    "detection_threshold": 0.5,
+    "detect_anomalies": false,
+    "detection_scheduler": false,
+    "detection_threshold": 0.3,
     "detection_window": 5,
-    "detection_start": 5,
+    "detection_start": 0,
+    "detection_similarity": "cosine",
     "detection_params": {
         "method": "similarity",
-        "similarities": ["cosine"],
         "pooling": "average",
-        "split": "knn_10_euclidean",
-        "aggregate": "mean"
+        "split": "knn_10_euclidean"
     }
 }
 

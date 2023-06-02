@@ -54,6 +54,11 @@ def get_similarities(X, similarity_functions):
 def per_class_densities(X_c, similarities=["seuclidean"], sigma=1, multi_idx=None):
     df_scores = pd.DataFrame(columns=["label"] + similarities)
     X = np.array(X_c["client_output"].to_list())
+    
+    if multi_idx is None:
+        idxs = range(0, X.shape[0])
+        multi_idx =  pd.MultiIndex.from_tuples(list(itertools.combinations(idxs, 2)), names=["i", "j"])
+    
     P = {s: get_p_ij(X, sigma=sigma, s=s, multi_idx=multi_idx) for s in similarities}
     
     X_cY = X_c.groupby(["label"])

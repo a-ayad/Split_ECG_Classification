@@ -1,4 +1,3 @@
-import multiprocessing
 import socket
 import pickle
 import json
@@ -40,88 +39,99 @@ def print_json():
 
 # load data from json file
 class PTB_XL(Dataset):
-    def __init__(self, X, y, stage):
+    def __init__(self, stage=None):
         self.stage = stage
-        self.X = X
-        self.y = y
+        if self.stage == "train":
+            global X_train
+            global y_train
+            self.y_train = y_train
+            self.X_train = X_train
+        if self.stage == "val":
+            global y_val
+            global X_val
+            self.y_val = y_val
+            self.X_val = X_val
+        if self.stage == "test":
+            global y_test
+            global X_test
+            self.y_test = y_test
+            self.X_test = X_test
+        if self.stage == "raw":
+            global y_raw
+            global X_raw
+            self.y_raw = y_raw
+            self.X_raw = X_raw
 
     def __len__(self):
-        return len(self.y)
+        if self.stage == "train":
+            return len(self.y_train)
+        if self.stage == "val":
+            return len(self.y_val)
+        if self.stage == "test":
+            return len(self.y_test)
+        if self.stage == "raw":
+            return len(self.y_raw)
 
     def __getitem__(self, idx):
-        sample = self.X[idx].transpose((1, 0)), self.y[idx]
+        if self.stage == "train":
+            sample = self.X_train[idx].transpose((1, 0)), self.y_train[idx]
+        if self.stage == "val":
+            sample = self.X_val[idx].transpose((1, 0)), self.y_val[idx]
+        if self.stage == "test":
+            sample = self.X_test[idx].transpose((1, 0)), self.y_test[idx]
+        if self.stage == "raw":
+            sample = self.X_raw[idx].transpose((1, 0)), self.y_raw[idx]
         return sample
 
 
 def init_train_val_dataset():
-    X_train, y_train = pickle.loads(open(f"train_dataset_{client_num}.pkl", "rb").read())
-    
-    if malicious:
-        X_train, y_train = poison_data(X_train, y_train)
-        
-    train_dataset = PTB_XL(X_train, y_train, stage="train")
-    val_dataset = pickle.loads(open(f"val_dataset_{client_num}.pkl", "rb").read())
-    
-    os.remove(f"train_dataset_{client_num}.pkl")
-    os.remove(f"val_dataset_{client_num}.pkl")
+    raw_dataset = PTB_XL("raw")
+    train_dataset = PTB_XL("train")
+    val_dataset = PTB_XL("val")
+    if IID:
+        subsets = [len(raw_dataset) // num_clients] * num_clients
+        if sum(subsets) < len(raw_dataset):
+            subsets[0] += len(raw_dataset) - sum(subsets)
+        split = torch.utils.data.random_split(
+            raw_dataset, subsets, generator=torch.Generator().manual_seed(42)
+        )
+        train_dataset = split[client_num - 1]
+    if pretrain_this_client:
+        print("len raw dataset", len(raw_dataset))
+        pretrain_dataset, no_dataset = torch.utils.data.random_split(
+            raw_dataset,
+            [round(19267 * IID_percentage), round(19267 * (1 - IID_percentage))],
+            generator=torch.Generator().manual_seed(42),
+        )
+        print("pretrain_dataset length: ", len(pretrain_dataset))
+        global pretrain_loader
+        pretrain_loader = torch.utils.data.DataLoader(
+            pretrain_dataset, batch_size=batchsize, shuffle=True
+        )
 
+    if mixed_dataset:
+        print("len raw dataset", len(raw_dataset))
+        pretrain_dataset, no_dataset = torch.utils.data.random_split(
+            raw_dataset,
+            [round(19267 * IID_percentage), round(19267 * (1 - IID_percentage))],
+            generator=torch.Generator().manual_seed(42),
+        )
+        print("len train dataset", len(train_dataset))
+        train_dataset = torch.utils.data.ConcatDataset(
+            (pretrain_dataset, train_dataset)
+        )
+        print("len mixed-train dataset", len(train_dataset))
+    print("train_dataset length: ", len(train_dataset))
+    print("val_dataset length: ", len(train_dataset))
     global train_loader
     global val_loader
-    
+
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batchsize, shuffle=True, num_workers=multiprocessing.cpu_count()
+        train_dataset, batch_size=batchsize, shuffle=True
     )
-    
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=batchsize, shuffle=False, num_workers=multiprocessing.cpu_count()
+        val_dataset, batch_size=batchsize, shuffle=False
     )
-#     raw_dataset = PTB_XL("raw")
-#     train_dataset = PTB_XL("train")
-#     val_dataset = PTB_XL("val")
-#     if IID:
-#         subsets = [len(raw_dataset) // num_clients] * num_clients
-#         if sum(subsets) < len(raw_dataset):
-#             subsets[0] += len(raw_dataset) - sum(subsets)
-#         split = torch.utils.data.random_split(
-#             raw_dataset, subsets, generator=torch.Generator().manual_seed(42)
-#         )
-#         train_dataset = split[client_num - 1]
-#     if pretrain_this_client:
-#         print("len raw dataset", len(raw_dataset))
-#         pretrain_dataset, no_dataset = torch.utils.data.random_split(
-#             raw_dataset,
-#             [round(19267 * IID_percentage), round(19267 * (1 - IID_percentage))],
-#             generator=torch.Generator().manual_seed(42),
-#         )
-#         print("pretrain_dataset length: ", len(pretrain_dataset))
-#         global pretrain_loader
-#         pretrain_loader = torch.utils.data.DataLoader(
-#             pretrain_dataset, batch_size=batchsize, shuffle=True
-#         )
-
-#     if mixed_dataset:
-#         print("len raw dataset", len(raw_dataset))
-#         pretrain_dataset, no_dataset = torch.utils.data.random_split(
-#             raw_dataset,
-#             [round(19267 * IID_percentage), round(19267 * (1 - IID_percentage))],
-#             generator=torch.Generator().manual_seed(42),
-#         )
-#         print("len train dataset", len(train_dataset))
-#         train_dataset = torch.utils.data.ConcatDataset(
-#             (pretrain_dataset, train_dataset)
-#         )
-#         print("len mixed-train dataset", len(train_dataset))
-#     print("train_dataset length: ", len(train_dataset))
-#     print("val_dataset length: ", len(train_dataset))
-#     global train_loader
-#     global val_loader
-
-#     train_loader = torch.utils.data.DataLoader(
-#         train_dataset, batch_size=batchsize, shuffle=True
-#     )
-#     val_loader = torch.utils.data.DataLoader(
-#         val_dataset, batch_size=batchsize, shuffle=False
-#     )
 
 
 def recieve_request(sock):
@@ -212,8 +222,6 @@ def train_epoch(s, pretraining):
             break
 
         flops_counter.read_counter("rest")
-        
-        optimizer = AdamW(client.parameters(), lr=lr)
 
         optimizer.zero_grad()  # sets gradients to 0 - start for backprop later
         client_output_backprop = client(x_train)
@@ -564,7 +572,6 @@ def test_stage(s, epoch):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     client.to(device)
-    encode.to(device)
     
     total_test_nr, test_loss_total = 0, 0
     (
@@ -727,6 +734,7 @@ def initIID():
     """
     Data loading
     """
+    global X_train, X_val, y_val, y_train, y_test, X_test
     sampling_frequency = 100
     datafolder = ptb_path
     task = "superdiagnostic"
@@ -744,10 +752,89 @@ def initIID():
 
     # 1-9 for training
     X_train = data[labels.strat_fold < 10]
+    global y_train
     y_train = Y[labels.strat_fold < 10]
     # 10 for validation
     X_val = data[labels.strat_fold == 10]
     y_val = Y[labels.strat_fold == 10]
+    
+    if malicious:
+        print("Malicious data poisoning activated for client", client_num)
+        # model poisoning
+        point_mask = np.random.uniform(size=X_train.shape[0]) <= data_poisoning_prob
+        
+        if point_mask.sum() > 0:
+            # Randomly change points
+            # x_train[point_mask] = torch.randn(
+            #     (point_mask.sum(), *x_train.shape[1:]),
+            #     dtype=x_train.dtype,
+            #     device=x_train.device,
+            # )
+            
+            # Blend normal samples with abnormal samples, and vice versa
+            data_poisoned = X_train[point_mask]
+            print("Poisoned data shape:", data_poisoned.shape)
+            data_poisoned.shape
+            Y_poisoned = y_train[point_mask]
+            
+            normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
+            abnormal_mask = ~normal_mask
+            
+            normal_data = data_poisoned[normal_mask]
+            abnormal_data = data_poisoned[abnormal_mask]
+            
+            abnormal_samples = abnormal_data[np.random.choice(abnormal_data.shape[0], normal_data.shape[0], replace=True)]
+            normal_samples = normal_data[np.random.choice(normal_data.shape[0], abnormal_data.shape[0], replace=True)]
+            
+            normal_data = blending_factor * normal_data + (1 - blending_factor) * abnormal_samples
+            abnormal_data = blending_factor * abnormal_data + (1 - blending_factor) * normal_samples
+            
+            data_poisoned[normal_mask] = normal_data
+            data_poisoned[abnormal_mask] = abnormal_data
+            print("Before poisoning:", X_train[point_mask][0])
+            X_train[point_mask] = data_poisoned
+            print("After poisoning:", X_train[point_mask][0])
+            
+            # Blend normal samples with sinusioidal
+            # data_poisoned = X_train[point_mask]
+            # data_poisoned.shape
+            # Y_poisoned = y_train[point_mask]
+            
+            # normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)        
+            # normal_data = data_poisoned[normal_mask]
+            # s = np.sin(np.arange(0, 10, 1 / 100) * blending_factor * 2 * np.pi)
+            # s = np.tile(s, (12, 1)).T
+                    
+            # normal_data = normal_data * s
+            
+            # data_poisoned[normal_mask] = normal_data
+            # X_train[point_mask] = data_poisoned
+            
+            print("Point Mask Non-Zero for client", client_num)
+
+        label_mask = np.random.uniform(size=y_train.shape[0]) <= label_flipping_prob
+        if label_mask.sum() > 0:
+            # Randomly flip labels
+            # label_train[label_mask] = torch.randint(
+            #     0,
+            #     2,
+            #     (label_mask.sum(), *label_train.shape[1:]),
+            #     dtype=label_train.dtype,
+            #     device=label_train.device,
+            # )
+            
+            # Change labels that are abnormal to normal, and vice versa
+            Y_poisoned = y_train[label_mask]
+            normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
+            normal_labels = Y_poisoned[normal_mask]
+            abnormal_mask = ~normal_mask
+            abnormal_labels = Y_poisoned[abnormal_mask]
+            rand_labels = np.random.randint(0, 2, size=(normal_labels.shape[0], 4))
+            Y_poisoned[abnormal_mask] = np.tile(np.array([0, 0, 0, 1, 0]), (abnormal_labels.shape[0], 1))
+            Y_poisoned[normal_mask] = np.concatenate((rand_labels[:, :-1], np.zeros((normal_labels.shape[0], 1), dtype=normal_labels.dtype), rand_labels[:, -1:]), axis=1)
+            y_train[label_mask] = Y_poisoned
+            
+            print("Label Mask Non-Zero for client", client_num)
 
     num_classes = 5  # <=== number of classes in the finetuning dataset
     input_shape = [
@@ -761,192 +848,106 @@ def initIID():
 
     X_train = utils.apply_standardizer(X_train, standard_scaler)
     X_val = utils.apply_standardizer(X_val, standard_scaler)
-    
-    train_dataset = PTB_XL(X_train, y_train, stage="train")
-    val_dataset = PTB_XL(X_val, y_val, stage="val")
-    
-    # divides the numpy array X_train into num_clients subsets of equal size        
-    subsets = torch.utils.data.random_split(
-        train_dataset, [1/num_clients] * num_clients, generator=torch.Generator().manual_seed(42)
-    )
-    subsets = [(X_train[subset.indices], y_train[subset.indices]) for subset in subsets]
 
-    for idx, subset in enumerate(subsets):
-        pickle.dump(subset, open(f"train_dataset_{idx+1}.pkl", "wb"))
-        pickle.dump(val_dataset, open(f"val_dataset_{idx+1}.pkl", "wb"))
-    
-def poison_data(X_train, y_train):
-    print("Malicious data poisoning activated for client", client_num)
-    # model poisoning
-    point_mask = np.random.uniform(size=X_train.shape[0]) <= data_poisoning_prob
-    
-    if point_mask.sum() > 0:
-        # Randomly change points
-        # x_train[point_mask] = torch.randn(
-        #     (point_mask.sum(), *x_train.shape[1:]),
-        #     dtype=x_train.dtype,
-        #     device=x_train.device,
-        # )
-        
-        # Blend normal samples with abnormal samples, and vice versa
-        data_poisoned = X_train[point_mask]
-        data_poisoned.shape
-        Y_poisoned = y_train[point_mask]
-        
-        normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
-        abnormal_mask = ~normal_mask
-        
-        normal_data = data_poisoned[normal_mask]
-        abnormal_data = data_poisoned[abnormal_mask]
-        
-        abnormal_samples = abnormal_data[np.random.choice(abnormal_data.shape[0], normal_data.shape[0], replace=True)]
-        normal_samples = normal_data[np.random.choice(normal_data.shape[0], abnormal_data.shape[0], replace=True)]
-        
-        normal_data = blending_factor * normal_data + (1 - blending_factor) * abnormal_samples
-        abnormal_data = blending_factor * abnormal_data + (1 - blending_factor) * normal_samples
-        
-        data_poisoned[normal_mask] = normal_data
-        data_poisoned[abnormal_mask] = abnormal_data
-        X_train[point_mask] = data_poisoned
-        
-        # Blend normal samples with sinusioidal
-        # data_poisoned = X_train[point_mask]
-        # data_poisoned.shape
-        # Y_poisoned = y_train[point_mask]
-        
-        # normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)        
-        # normal_data = data_poisoned[normal_mask]
-        # s = np.sin(np.arange(0, 10, 1 / 100) * blending_factor * 2 * np.pi)
-        # s = np.tile(s, (12, 1)).T
-                
-        # normal_data = normal_data * s
-        
-        # data_poisoned[normal_mask] = normal_data
-        # X_train[point_mask] = data_poisoned
-        
-        print("Point Mask Non-Zero for client", client_num)
-
-    label_mask = np.random.uniform(size=y_train.shape[0]) <= label_flipping_prob
-    if label_mask.sum() > 0:
-        # Randomly flip labels
-        # label_train[label_mask] = torch.randint(
-        #     0,
-        #     2,
-        #     (label_mask.sum(), *label_train.shape[1:]),
-        #     dtype=label_train.dtype,
-        #     device=label_train.device,
-        # )
-        
-        # Change labels that are abnormal to normal, and vice versa
-        Y_poisoned = y_train[label_mask]
-        normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
-        normal_labels = Y_poisoned[normal_mask]
-        abnormal_mask = ~normal_mask
-        abnormal_labels = Y_poisoned[abnormal_mask]
-        rand_labels = np.random.randint(0, 2, size=(normal_labels.shape[0], 4))
-        Y_poisoned[abnormal_mask] = np.tile(np.array([0, 0, 0, 1, 0]), (abnormal_labels.shape[0], 1))
-        Y_poisoned[normal_mask] = np.concatenate((rand_labels[:, :-1], np.zeros((normal_labels.shape[0], 1), dtype=normal_labels.dtype), rand_labels[:, -1:]), axis=1)
-        y_train[label_mask] = Y_poisoned
-        
-        print("Label Mask Non-Zero for client", client_num)
-    
-    return X_train, y_train
+    global X_raw, y_raw
+    X_raw = X_train
+    y_raw = y_train
 
 
-# def init_nonIID():
-#     """
-#     Initializing the non-IID data, by dividing the training data into the 5 different classes
-#     and assigning each client a different dataset/class
-#     """
-#     global X_train, X_val, y_val, y_train, y_test, X_test
-#     norm, mi, sttc, hyp, cd = [], [], [], [], []
-#     for a in range(len(y_train)):
-#         if label_class(y_train[a], 0):
-#             sttc.append(X_train[a])
-#         if label_class(y_train[a], 1):
-#             hyp.append(X_train[a])
-#         if label_class(y_train[a], 2):
-#             mi.append(X_train[a])
-#         if label_class(y_train[a], 3):
-#             norm.append(X_train[a])
-#         if label_class(y_train[a], 4):
-#             cd.append(X_train[a])
+def init_nonIID():
+    """
+    Initializing the non-IID data, by dividing the training data into the 5 different classes
+    and assigning each client a different dataset/class
+    """
+    global X_train, X_val, y_val, y_train, y_test, X_test
+    norm, mi, sttc, hyp, cd = [], [], [], [], []
+    for a in range(len(y_train)):
+        if label_class(y_train[a], 0):
+            sttc.append(X_train[a])
+        if label_class(y_train[a], 1):
+            hyp.append(X_train[a])
+        if label_class(y_train[a], 2):
+            mi.append(X_train[a])
+        if label_class(y_train[a], 3):
+            norm.append(X_train[a])
+        if label_class(y_train[a], 4):
+            cd.append(X_train[a])
 
-#     if client_num == 1:
-#         if num_classes == 1:
-#             print("Client number: ", client_num, " Class norm")
-#             X_train = norm
-#             y_train = label_norm
-#         if num_classes == 2:
-#             print("Client number: ", client_num, " Class norm, mi")
-#             X_train = np.concatenate((norm, mi), axis=0)
-#             y_train = np.concatenate((label_norm, label_mi), axis=0)
-#         if num_classes == 3:
-#             print("Client number: ", client_num, " Class norm, mi, sttc")
-#             X_train = np.concatenate((norm, mi), axis=0)
-#             X_train = np.concatenate((X_train, sttc), axis=0)
-#             y_train = np.concatenate((label_norm, label_mi), axis=0)
-#             y_train = np.concatenate((y_train, label_sttc), axis=0)
-#     if client_num == 2:
-#         if num_classes == 1:
-#             print("Client number: ", client_num, " Class mi")
-#             X_train = mi
-#             y_train = label_mi
-#         if num_classes == 2:
-#             print("Client number: ", client_num, " Class mi, sttc")
-#             X_train = np.concatenate((mi, sttc), axis=0)
-#             y_train = np.concatenate((label_mi, label_sttc), axis=0)
-#         if num_classes == 3:
-#             print("Client number: ", client_num, " Class mi, sttc, hyp")
-#             X_train = np.concatenate((mi, sttc), axis=0)
-#             X_train = np.concatenate((X_train, hyp), axis=0)
-#             y_train = np.concatenate((label_mi, label_sttc), axis=0)
-#             y_train = np.concatenate((y_train, label_hyp), axis=0)
-#     if client_num == 3:
-#         if num_classes == 1:
-#             print("Client number: ", client_num, " Class sttc")
-#             X_train = sttc
-#             y_train = label_sttc
-#         if num_classes == 2:
-#             print("Client number: ", client_num, " Class sttc, hyp")
-#             X_train = np.concatenate((sttc, hyp), axis=0)
-#             y_train = np.concatenate((label_sttc, label_hyp), axis=0)
-#         if num_classes == 3:
-#             print("Client number: ", client_num, " Class sttc, hyp, cd")
-#             X_train = np.concatenate((sttc, hyp), axis=0)
-#             X_train = np.concatenate((X_train, cd), axis=0)
-#             y_train = np.concatenate((label_sttc, label_hyp), axis=0)
-#             y_train = np.concatenate((y_train, label_cd), axis=0)
-#     if client_num == 4:
-#         if num_classes == 1:
-#             print("Client number: ", client_num, " Class hyp")
-#             X_train = hyp
-#             y_train = label_hyp
-#         if num_classes == 2:
-#             print("Client number: ", client_num, " Class hyp, cd")
-#             X_train = np.concatenate((hyp, cd), axis=0)
-#             y_train = np.concatenate((label_hyp, label_cd), axis=0)
-#         if num_classes == 3:
-#             print("Client number: ", client_num, " Class hyp, cd, norm")
-#             X_train = np.concatenate((hyp, cd), axis=0)
-#             X_train = np.concatenate((X_train, norm), axis=0)
-#             y_train = np.concatenate((label_hyp, label_cd), axis=0)
-#             y_train = np.concatenate((y_train, label_norm), axis=0)
-#     if client_num == 5:
-#         if num_classes == 1:
-#             print("Client number: ", client_num, " Class cd")
-#             X_train = cd
-#             y_train = label_cd
-#         if num_classes == 2:
-#             print("Client number: ", client_num, " Class cd, norm")
-#             X_train = np.concatenate((cd, norm), axis=0)
-#             y_train = np.concatenate((label_cd, label_norm), axis=0)
-#         if num_classes == 3:
-#             print("Client number: ", client_num, " Class cd, norm, mi")
-#             X_train = np.concatenate((cd, norm), axis=0)
-#             X_train = np.concatenate((X_train, mi), axis=0)
-#             y_train = np.concatenate((label_cd, label_norm), axis=0)
-#             y_train = np.concatenate((y_train, label_mi), axis=0)
+    if client_num == 1:
+        if num_classes == 1:
+            print("Client number: ", client_num, " Class norm")
+            X_train = norm
+            y_train = label_norm
+        if num_classes == 2:
+            print("Client number: ", client_num, " Class norm, mi")
+            X_train = np.concatenate((norm, mi), axis=0)
+            y_train = np.concatenate((label_norm, label_mi), axis=0)
+        if num_classes == 3:
+            print("Client number: ", client_num, " Class norm, mi, sttc")
+            X_train = np.concatenate((norm, mi), axis=0)
+            X_train = np.concatenate((X_train, sttc), axis=0)
+            y_train = np.concatenate((label_norm, label_mi), axis=0)
+            y_train = np.concatenate((y_train, label_sttc), axis=0)
+    if client_num == 2:
+        if num_classes == 1:
+            print("Client number: ", client_num, " Class mi")
+            X_train = mi
+            y_train = label_mi
+        if num_classes == 2:
+            print("Client number: ", client_num, " Class mi, sttc")
+            X_train = np.concatenate((mi, sttc), axis=0)
+            y_train = np.concatenate((label_mi, label_sttc), axis=0)
+        if num_classes == 3:
+            print("Client number: ", client_num, " Class mi, sttc, hyp")
+            X_train = np.concatenate((mi, sttc), axis=0)
+            X_train = np.concatenate((X_train, hyp), axis=0)
+            y_train = np.concatenate((label_mi, label_sttc), axis=0)
+            y_train = np.concatenate((y_train, label_hyp), axis=0)
+    if client_num == 3:
+        if num_classes == 1:
+            print("Client number: ", client_num, " Class sttc")
+            X_train = sttc
+            y_train = label_sttc
+        if num_classes == 2:
+            print("Client number: ", client_num, " Class sttc, hyp")
+            X_train = np.concatenate((sttc, hyp), axis=0)
+            y_train = np.concatenate((label_sttc, label_hyp), axis=0)
+        if num_classes == 3:
+            print("Client number: ", client_num, " Class sttc, hyp, cd")
+            X_train = np.concatenate((sttc, hyp), axis=0)
+            X_train = np.concatenate((X_train, cd), axis=0)
+            y_train = np.concatenate((label_sttc, label_hyp), axis=0)
+            y_train = np.concatenate((y_train, label_cd), axis=0)
+    if client_num == 4:
+        if num_classes == 1:
+            print("Client number: ", client_num, " Class hyp")
+            X_train = hyp
+            y_train = label_hyp
+        if num_classes == 2:
+            print("Client number: ", client_num, " Class hyp, cd")
+            X_train = np.concatenate((hyp, cd), axis=0)
+            y_train = np.concatenate((label_hyp, label_cd), axis=0)
+        if num_classes == 3:
+            print("Client number: ", client_num, " Class hyp, cd, norm")
+            X_train = np.concatenate((hyp, cd), axis=0)
+            X_train = np.concatenate((X_train, norm), axis=0)
+            y_train = np.concatenate((label_hyp, label_cd), axis=0)
+            y_train = np.concatenate((y_train, label_norm), axis=0)
+    if client_num == 5:
+        if num_classes == 1:
+            print("Client number: ", client_num, " Class cd")
+            X_train = cd
+            y_train = label_cd
+        if num_classes == 2:
+            print("Client number: ", client_num, " Class cd, norm")
+            X_train = np.concatenate((cd, norm), axis=0)
+            y_train = np.concatenate((label_cd, label_norm), axis=0)
+        if num_classes == 3:
+            print("Client number: ", client_num, " Class cd, norm, mi")
+            X_train = np.concatenate((cd, norm), axis=0)
+            X_train = np.concatenate((X_train, mi), axis=0)
+            y_train = np.concatenate((label_cd, label_norm), axis=0)
+            y_train = np.concatenate((y_train, label_mi), axis=0)
 
 
 def label_class(label, clas):
@@ -1059,6 +1060,7 @@ def main():
     """
     global label_sttc, label_hyp, label_mi, label_norm, label_cd
     label_sttc, label_hyp, label_mi, label_norm, label_cd = [], [], [], [], []
+    global X_train, X_val, y_val, y_train, y_test, X_test
     global flops_client_forward_total, flops_client_encoder_total, flops_client_backprop_total, flops_client_send_total, flops_client_recieve_total, flops_client_rest_total
     (
         flops_client_forward_total,
@@ -1193,33 +1195,33 @@ def main():
             }
         )
         wandb.config.update({"learning_rate": lr, "PC: ": 2})
-        
-    if client_num > 0:   
-        print_json()
-        init_train_val_dataset()
-        init_nn_parameters()
 
-        s = socket.socket()
-        print("Start socket connect")
-        s.connect((host, port))
-        print("Socket connect success, to.", host, port)
 
-        if pretrain_this_client:
-            print("Pretrain active")
-            for a in range(pretrain_epochs):
-                train_epoch(s, pretraining=1)
-                val_stage(s, pretraining=1)
-            initial_weights = client.state_dict()
-            Communication.send_msg(s, 2, initial_weights)
-            Communication.send_msg(s, 3, 0)
-            epoch = 0
+    
+    initIID()
+    init_nonIID()
+    print_json()
+    init_train_val_dataset()
+    
+    
+    init_nn_parameters()
 
-        serverHandler(s)
-    else:
-        if IID:
-            initIID()
-        else:
-            init_nonIID()
+    s = socket.socket()
+    print("Start socket connect")
+    s.connect((host, port))
+    print("Socket connect success, to.", host, port)
+
+    if pretrain_this_client:
+        print("Pretrain active")
+        for a in range(pretrain_epochs):
+            train_epoch(s, pretraining=1)
+            val_stage(s, pretraining=1)
+        initial_weights = client.state_dict()
+        Communication.send_msg(s, 2, initial_weights)
+        Communication.send_msg(s, 3, 0)
+        epoch = 0
+
+    serverHandler(s)
 
 
 if __name__ == "__main__":
