@@ -788,41 +788,59 @@ def poison_data(X_train, y_train):
         #     device=x_train.device,
         # )
         
-        # Blend normal samples with abnormal samples, and vice versa
-        data_poisoned = X_train[point_mask]
-        data_poisoned.shape
-        Y_poisoned = y_train[point_mask]
-        
-        normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
-        abnormal_mask = ~normal_mask
-        
-        normal_data = data_poisoned[normal_mask]
-        abnormal_data = data_poisoned[abnormal_mask]
-        
-        abnormal_samples = abnormal_data[np.random.choice(abnormal_data.shape[0], normal_data.shape[0], replace=True)]
-        normal_samples = normal_data[np.random.choice(normal_data.shape[0], abnormal_data.shape[0], replace=True)]
-        
-        normal_data = blending_factor * normal_data + (1 - blending_factor) * abnormal_samples
-        abnormal_data = blending_factor * abnormal_data + (1 - blending_factor) * normal_samples
-        
-        data_poisoned[normal_mask] = normal_data
-        data_poisoned[abnormal_mask] = abnormal_data
-        X_train[point_mask] = data_poisoned
-        
-        # Blend normal samples with sinusioidal
-        # data_poisoned = X_train[point_mask]
-        # data_poisoned.shape
-        # Y_poisoned = y_train[point_mask]
-        
-        # normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)        
-        # normal_data = data_poisoned[normal_mask]
-        # s = np.sin(np.arange(0, 10, 1 / 100) * blending_factor * 2 * np.pi)
-        # s = np.tile(s, (12, 1)).T
-                
-        # normal_data = normal_data * s
-        
-        # data_poisoned[normal_mask] = normal_data
-        # X_train[point_mask] = data_poisoned
+        if data_poisoning_method == "blend":
+            #Blend normal samples with abnormal samples, and vice versa
+            print("Poisoning data with blending")
+            data_poisoned = X_train[point_mask]
+            data_poisoned.shape
+            Y_poisoned = y_train[point_mask]
+            
+            normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
+            abnormal_mask = ~normal_mask
+            
+            normal_data = data_poisoned[normal_mask]
+            abnormal_data = data_poisoned[abnormal_mask]
+            
+            abnormal_samples = abnormal_data[np.random.choice(abnormal_data.shape[0], normal_data.shape[0], replace=True)]
+            normal_samples = normal_data[np.random.choice(normal_data.shape[0], abnormal_data.shape[0], replace=True)]
+            
+            normal_data = blending_factor * normal_data + (1 - blending_factor) * abnormal_samples
+            abnormal_data = blending_factor * abnormal_data + (1 - blending_factor) * normal_samples
+            
+            data_poisoned[normal_mask] = normal_data
+            data_poisoned[abnormal_mask] = abnormal_data
+            X_train[point_mask] = data_poisoned
+
+        elif data_poisoning_method == "sinusoidal":
+            # Blend normal samples with sinusioidal
+            data_poisoned = X_train[point_mask]
+            data_poisoned.shape
+            Y_poisoned = y_train[point_mask]
+            
+            normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)        
+            normal_data = data_poisoned[normal_mask]
+            s = np.sin(np.arange(0, 10, 1 / 100) * blending_factor * 2 * np.pi)
+            s = np.tile(s, (12, 1)).T
+                    
+            normal_data = normal_data * s
+            
+            data_poisoned[normal_mask] = normal_data
+            X_train[point_mask] = data_poisoned
+
+        elif data_poisoning_method == "flat":
+            # Blend abnormal samples with flat line
+            data_poisoned = X_train[point_mask]
+            data_poisoned.shape
+            Y_poisoned = y_train[point_mask]
+            
+            normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)   
+            abnormal_mask = ~normal_mask     
+            abnormal_data = data_poisoned[abnormal_mask]
+                    
+            abnormal_data = abnormal_data * 0
+            
+            data_poisoned[abnormal_mask] = abnormal_data
+            X_train[point_mask] = data_poisoned
         
         print("Point Mask Non-Zero for client", client_num)
 
@@ -1079,7 +1097,7 @@ def main():
     global flops_counter
     global mlb_path, scaler_path, ptb_path, output_path
     global lr, batchsize, host, port, max_recv, autoencoder, count_flops, model, num_classes, data_poisoning_prob, blending_factor, label_flipping_prob, record_latent_space, autoencoder_train
-    global average_setting, weights_and_biases, latent_space_image, mixed_dataset, IID_percentage, IID, latent_space_dir, client_num, num_clients, pretrain_this_client, malicious
+    global average_setting, weights_and_biases, latent_space_image, mixed_dataset, IID_percentage, IID, latent_space_dir, client_num, num_clients, pretrain_this_client, malicious, data_poisoning_method
 
     cwd = os.path.dirname(os.path.abspath(__file__))
     cwd = os.path.dirname(cwd)
@@ -1136,6 +1154,7 @@ def main():
     blending_factor = (
         data["blending_factor"] if malicious else 0.0
     )
+    data_poisoning_method = data["data_poisoning_method"]
     label_flipping_prob = (
         data["label_flipping_prob"] if malicious else 0.0
     )

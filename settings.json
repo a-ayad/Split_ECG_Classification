@@ -1,6 +1,6 @@
 {
     "host": "localhost",
-    "port": 10076,
+    "port": 10072,
     "max_recv": 8192, 
 
     "batchsize": 64,
@@ -32,15 +32,17 @@
 
 
     "record_latent_space": false,
-    "exp_name": "10_C_6_M_LF_1.0",
-    "num_malicious": 6,
-    "data_poisoning_prob": 0.0,
-    "blending_factor": 0.66,
-    "label_flipping_prob": 1.0,
+    "exp_name": "10_C_2_M_DP_1.0_flat",
+    "num_malicious": 2,
+    "data_poisoning_prob": 1.0,
+    "data_poisoning_method": "flat",
+    "blending_factor": 0.0,
+    "label_flipping_prob": 0.0,
 
     "detect_anomalies": false,
     "detection_scheduler": false,
-    "detection_threshold": 0.3,
+    "detection_tau": 0.3,
+    "detection_sigma": 2,
     "detection_window": 5,
     "detection_start": 0,
     "detection_similarity": "cosine",

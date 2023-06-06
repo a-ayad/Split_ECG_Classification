@@ -49,12 +49,13 @@ client_weights_available = 0
 detect_anomalies = data["detect_anomalies"]
 # global latent_space_image
 # global detection_scores
-# global detection_threshold
+# global detection_tau
 
 if detect_anomalies:
     latent_space_image = utils.reset_latent_space_image()
     detection_scores = pd.DataFrame()
-    detection_threshold = data["detection_threshold"]
+    detection_tau = data["detection_tau"]
+    detection_sigma = data["detection_sigma"]
     detection_params = data["detection_params"]
     detection_similarity = data["detection_similarity"]
     detection_window = data["detection_window"]
@@ -71,9 +72,14 @@ def update_detection_scores(latent_space_image, detection_scores, epoch, stage="
         client_score[detection_similarity] = (1 / client_score[detection_similarity]).multiply(client_loss, axis=0)
         df_scores = pd.concat([df_scores, client_score], ignore_index=True)
     
+    # Mean of all Labels
     df_scores = df_scores.groupby(["client_id", "epoch"]).mean().reset_index()
+    
+    # MAD under gaussian kernel
+    df_scores = df_scores.groupby("epoch").apply(lambda x: medianAbsoluteDeviation(x, similarities=[detection_similarity], sigma=detection_sigma))
+    
+    # Taking Softmax of Scores
     df_probs =  df_scores.groupby("epoch").apply(lambda x: softmaxScheduler(x, similarities=[detection_similarity]))   
-    df_scores = df_scores.groupby("epoch").apply(lambda x: medianAbsoluteDeviation(x, similarities=[detection_similarity]))
     df_scores["prob"] = df_probs[detection_similarity]
     df_scores = df_scores[["client_id", "epoch", "prob"] + [detection_similarity]]
     
@@ -81,25 +87,45 @@ def update_detection_scores(latent_space_image, detection_scores, epoch, stage="
         
     return detection_scores
 
-def has_update(client_id):
+def soft_threshold(client_id):
+    if not detect_anomalies:
+        return False
+    else:
+        return get_detection_score(client_id) < detection_tau
+
+def hard_threshold(client_id):
+    if not detect_anomalies:
+        return False
+    else:
+        return get_detection_score(client_id) < 0.5 * detection_tau
+    
+def get_detection_score(client_id):
     if len(detection_scores) == 0:
-        return True
+        return 1.0
     
     max_epoch = detection_scores["epoch"].max()
     
     if not max_epoch > detection_start:
-        return True
+        return 1.0
     
     client_scores = detection_scores[detection_scores["client_id"] == client_id]
-    window_scores = client_scores[client_scores["epoch"] >= max_epoch - detection_window]
+    client_scores = client_scores[client_scores["epoch"] >= max_epoch - detection_window]
     
-    if window_scores[detection_similarity].mean() > detection_threshold:
-        return False
-    elif detection_scheduler:
-        prob = window_scores["prob"].mean()
-        return np.random.uniform() < prob
-    else:
-        return True
+    return client_scores[detection_similarity].mean()
+    
+def get_update_probability(client_id):
+    if len(detection_scores) == 0:
+        return 1.0
+    
+    max_epoch = detection_scores["epoch"].max()
+    
+    if not max_epoch > detection_start:
+        return 1.0
+    
+    client_scores = detection_scores[detection_scores["client_id"] == client_id]
+    client_scores = client_scores[client_scores["epoch"] >= max_epoch - detection_window]
+    
+    return client_scores["prob"].mean()
 
 def send_msg(sock, content):
     """
@@ -249,6 +275,10 @@ def updateclientmodels(sock, updatedweights):
     :param updatedweights: the client side weghts with actual status
     """
     update_time = time.time()
+    client_id = connectedclients.index(sock) + 1
+    print("Weights Update for Client: ", client_id)
+    if soft_threshold(client_id):
+        return
     #client.load_state_dict(updatedweights)
     global client_weights
     global client_weights_available
@@ -339,8 +369,8 @@ def calc_gradients(conn, msg):
     
     # Malicious Client Detection
     epoch = msg['epoch']
+    client_id = msg['client_id']
     if detect_anomalies:
-        client_id = msg['client_id']
         stage = msg['stage']
         sample = {
             "client_output": utils.split_batch(client_output_train_decode),
@@ -361,10 +391,7 @@ def calc_gradients(conn, msg):
     # print("client_grad_size: ", client_grad_backprop.size())
     client_grad = client_grad_backprop.detach().clone()
     
-    if detect_anomalies:
-        update_server = has_update(client_id)
-    else:
-        update_server = True
+    update_server = not soft_threshold(client_id)
     
     if update_server:
         optimizer.step()
@@ -575,6 +602,9 @@ def main():
     global detection_scores
     for epoch in range(num_epochs):
         for c, client in enumerate(connectedclients):
+            print("Started Training + Val for Client: ", c+1)
+            if hard_threshold(c+1):
+                continue
             print("init client: ", c+1)
             initialize_client(client)
             print("train_client: ", c+1)

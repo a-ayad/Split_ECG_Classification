@@ -20,9 +20,6 @@ from tqdm.notebook import tqdm_notebook as tqdm
 import math  
 from .utils import *
 
-def gaussian_kernel(d_ij, sigma=1):
-    return np.exp(-d_ij ** 2 / (2 * (sigma ** 2)))
-
 def get_p_ij(X, sigma=1, s="euclidean", Z=None, multi_idx=None):
     d_ij = gaussian_kernel(sp.distance.pdist(X, s), sigma)
     
