@@ -136,7 +136,7 @@ def per_epoch_tsne(epochs, base_path, num_clients, params, pooling=None, pca=Non
         norm = mpl.colors.BoundaryNorm((np.arange(2 ** num_labels - 1)), cmap.N)
     
     # Get per epoch t-SNE embeddings for all clients and plot them
-    for client_id in tqdm(range(1, num_subplots + 1), desc="Client", position=0):
+    for client_id in tqdm(range(num_subplots), desc="Client", position=0):
         for idx, epoch in tqdm(enumerate(epochs), total=num_epochs, desc="Epoch", position=1, leave=False):
             samples = pd.read_pickle(os.path.join(base_path, "client_" + str(client_id), "epoch_" + str(epoch) + ".pickle"))
             samples = split_labels(samples, split=split)

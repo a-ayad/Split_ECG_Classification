@@ -24,7 +24,7 @@ import Communication
 import warnings
 
 warnings.simplefilter("ignore", UserWarning)
-from torchmetrics.classification import Accuracy, F1Score, AUROC
+from torchmetrics.classification import Accuracy, F1Score, AUROC, AveragePrecision
 
 # np.set_printoptions(threshold=np.inf)
 
@@ -151,12 +151,39 @@ def handle_request(sock, getid, content):
         1: train_epoch,
         2: val_stage,
         3: test_stage,
+        4: change_logging,
+        5: set_id,
+        6: close_connection,
     }
     switcher.get(getid, "invalid request recieved")(sock, content)
+    
+def close_connection(s, content):
+    global client_connected
+    client_connected = False
 
+def set_id(s, id):
+    global client_num
+    client_num = id
+    print(f"INITIALIZED CLIENT {client_num}, MALICIUOS: {malicious}")
+    
+    if malicious:
+        print(f"---- LFP: {label_flipping_prob}")
+        print(f"---- DPP: {data_poisoning_prob}")
+        print(f"---- ALPHA: {blending_factor}")
+        print(f"---- METHOD: {data_poisoning_method}")
+
+def change_logging(s, state):
+    global logging_active, weights_and_biases
+    if logging_active != state and weights_and_biases:
+        print(f"Changed logging state of client {client_num} from: {logging_active}")
+        logging_active = state
+        print(f"To new state: {logging_active}")
+        if logging_active:
+            wandb.init(project="SL_Security", entity="mohkoh",name=exp_name, resume=True)
 
 def serverHandler(conn):
-    while True:
+    global client_connected
+    while client_connected:
         recieve_request(conn)
 
 
@@ -181,7 +208,7 @@ def train_epoch(s, pretraining):
         flops_rest,
         flops_send,
     ) = (0, 0, 0, 0, 0)
-    acc, f1, auc = 0, 0, 0
+    acc, f1, auc, auprc = 0, 0, 0, 0
 
     epoch_start_time = time.time()
 
@@ -192,6 +219,7 @@ def train_epoch(s, pretraining):
     test_accuracy = Accuracy(num_classes=5, average=average_setting)
     test_f1 = F1Score(num_classes=5, average=average_setting)
     test_auc = AUROC(num_classes=5, average=average_setting)
+    test_auprc = AveragePrecision(num_classes=5, average=average_setting)
 
     for b, batch in enumerate(loader):
         flops_counter.read_counter("")  # Reset FLOPs counter
@@ -236,9 +264,8 @@ def train_epoch(s, pretraining):
             "label_train": label_train,  # concat_labels,
             "batchsize": batchsize,
             "epoch": epoch,
-            "stage": "train",
-            "client_id": client_num,
-        }
+            "stage": "train"
+            }
 
         if record_latent_space:
             # Save pooled vector for analysis
@@ -258,7 +285,7 @@ def train_epoch(s, pretraining):
         msg = Communication.recieve_msg(s)  # Recieve message from server
 
         if pretraining == 0:
-            if weights_and_biases:
+            if logging_active:
                 wandb.log({"dropout_threshold": msg["dropout_threshold"]}, commit=False)
 
         # decode grad:
@@ -321,6 +348,10 @@ def train_epoch(s, pretraining):
             output_train.detach().clone().cpu(),
             label_train.detach().clone().cpu().int(),
         ).numpy()
+        auprc += test_auprc(
+            output_train.detach().clone().cpu(),
+            label_train.detach().clone().cpu().int(),
+        ).numpy()
 
     # Evaluation of Epoch
     epoch_endtime = time.time() - epoch_start_time
@@ -330,6 +361,7 @@ def train_epoch(s, pretraining):
         batches_aborted,
         epoch_endtime,
         test_auc,
+        test_auprc,
         test_accuracy,
         test_f1,
         pretraining,
@@ -351,6 +383,7 @@ def epoch_evaluation(
     batches_aborted,
     epoch_endtime,
     test_auc,
+    test_auprc,
     test_accuracy,
     test_f1,
     pretraining,
@@ -362,9 +395,11 @@ def epoch_evaluation(
     epoch_auc = test_auc.compute()
     epoch_accuracy = test_accuracy.compute()
     epoch_f1 = test_f1.compute()
-    status_train = "epoch: {}, auc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}, trainingtime for epoch: {:.6f}s, batches abortrate:{:.2f}, train_loss: {:.4f} ".format(
+    epoch_auprc = test_auprc.compute()
+    status_train = "epoch: {}, auc: {:.4f}, auprc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}, trainingtime for epoch: {:.6f}s, batches abortrate:{:.2f}, train_loss: {:.4f} ".format(
         epoch,
         epoch_auc,
+        epoch_auprc,
         epoch_accuracy,
         epoch_f1,
         epoch_endtime,
@@ -411,7 +446,7 @@ def epoch_evaluation(
             print("MegaFLOPS_send", flops_counter.flops_send / 1000000)
             print("MegaFLOPS_recieve", flops_counter.flops_recieve / 1000000)
 
-        if weights_and_biases and count_flops:
+        if logging_active and count_flops:
             wandb.log(
                 {
                     "Batches Abortrate": batches_aborted / total_train_nr,
@@ -427,8 +462,9 @@ def epoch_evaluation(
                 commit=False,
             )
 
-        global auc_train_log, accuracy_train_log, f1_train_log, batches_abort_rate_total
+        global auc_train_log, auprc_train_log, accuracy_train_log, f1_train_log, batches_abort_rate_total
         auc_train_log = epoch_auc
+        auprc_train_log = epoch_auprc
         f1_train_log = epoch_f1
         accuracy_train_log = epoch_accuracy
         batches_abort_rate_total += batches_aborted / total_train_nr
@@ -450,10 +486,11 @@ def val_stage(s, pretraining=0):
         accuracy_sklearn,
         accuracy_custom,
     ) = (0, 0, 0, 0, 0, 0)
-    acc, f1, auc = 0, 0, 0
+    acc, f1, auc, auprc = 0, 0, 0, 0
     val_accuracy = Accuracy(num_classes=5, average=average_setting)
     val_f1 = F1Score(num_classes=5, average=average_setting)
     val_auc = AUROC(num_classes=5, average=average_setting)
+    val_auprc = AveragePrecision(num_classes=5, average=average_setting)
 
     with torch.no_grad():  # No training involved, thus no gradient needed
         for b_t, batch_t in enumerate(val_loader):
@@ -470,7 +507,6 @@ def val_stage(s, pretraining=0):
                 "label_val/test": label_val,
                 "epoch": epoch,
                 "stage": "val",
-                "client_id": client_num,
                 "batchsize": val_batchsize,
             }
             Communication.send_msg(s, 1, msg)
@@ -516,18 +552,23 @@ def val_stage(s, pretraining=0):
                 output_val_server.detach().clone().cpu(),
                 label_val.detach().clone().cpu().int(),
             ).numpy()
+            auprc += val_auprc(
+                output_val_server.detach().clone().cpu(),
+                label_val.detach().clone().cpu().int(),
+            ).numpy()
 
-    epoch_auc, epoch_accuracy, epoch_f1 = (
+    epoch_auc, epoch_auprc, epoch_accuracy, epoch_f1 = (
         val_auc.compute(),
+        val_auprc.compute(),
         val_accuracy.compute(),
         val_f1.compute(),
     )
-    status_train = "auc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}".format(
-        epoch_auc, epoch_accuracy, epoch_f1
+    status_train = "auc: {:.4f}, auprc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}".format(
+        epoch_auc, epoch_auprc, epoch_accuracy, epoch_f1
     )
     print("status_val: ", status_train)
 
-    if pretraining == 0 and weights_and_biases:
+    if pretraining == 0 and logging_active:
         wandb.define_metric("AUC_val", summary="max")
         wandb.define_metric("Accuracy_val", summary="max")
         wandb.define_metric("F1_val", summary="max")
@@ -538,11 +579,14 @@ def val_stage(s, pretraining=0):
                 "Accuracy_val": epoch_accuracy,
                 "F1_val": epoch_f1,
                 "AUC_val": epoch_auc,
+                "AUPRC_val": epoch_auprc,
                 "AUC_train": auc_train_log,
+                "AUPRC_train": auprc_train_log,
                 "Accuracy_train": accuracy_train_log,
                 "F1_train": f1_train_log,
             }
         )
+        print("!!!!!!!! Logging Client: ", client_num)
 
     if not pretraining:
         client.to("cpu")  # free up some gpu memory
@@ -575,10 +619,11 @@ def test_stage(s, epoch):
         accuracy_sklearn,
         accuracy_custom,
     ) = (0, 0, 0, 0, 0, 0)
-    acc, f1, auc = 0, 0, 0
+    acc, f1, auc, auprc = 0, 0, 0, 0
     test_accuracy = Accuracy(num_classes=5, average=average_setting)
     test_f1 = F1Score(num_classes=5, average=average_setting)
     test_auc = AUROC(num_classes=5, average=average_setting)
+    test_auprc = AveragePrecision(num_classes=5, average=average_setting)
 
     with torch.no_grad():  # No training involved, thus no gradient needed
         for b_t, batch_t in enumerate(val_loader):
@@ -595,7 +640,6 @@ def test_stage(s, epoch):
                 "label_val/test": label_test,
                 "epoch": epoch,
                 "stage": "test",
-                "client_id": client_num,
                 "batchsize": test_batchsize,
             }
             Communication.send_msg(s, 1, msg)
@@ -641,18 +685,23 @@ def test_stage(s, epoch):
                 output_test_server.detach().clone().cpu(),
                 label_test.detach().clone().cpu().int(),
             ).numpy()
+            auprc += test_auprc(
+                output_test_server.detach().clone().cpu(),
+                label_test.detach().clone().cpu().int(),
+            ).numpy()
 
-    epoch_auc, epoch_accuracy, epoch_f1 = (
+    epoch_auc, epoch_auprc, epoch_accuracy, epoch_f1 = (
         test_auc.compute(),
+        test_auprc.compute(),
         test_accuracy.compute(),
         test_f1.compute(),
     )
-    status_train = "auc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}".format(
-        epoch_auc, epoch_accuracy, epoch_f1
+    status_train = "auc: {:.4f}, auprc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}".format(
+        epoch_auc, epoch_auprc, epoch_accuracy, epoch_f1
     )
     print("status_test: ", status_train)
     
-    if weights_and_biases:
+    if logging_active:
         wandb.define_metric("AUC_test", summary="max")
         wandb.define_metric("Accuracy_test", summary="max")
         wandb.define_metric("F1_test", summary="max")
@@ -662,6 +711,7 @@ def test_stage(s, epoch):
                 "Accuracy_test": epoch_accuracy,
                 "F1_test": epoch_f1,
                 "AUC_test": epoch_auc,
+                "AUPRC_test": epoch_auprc,
             }
         )
 
@@ -691,7 +741,7 @@ def test_stage(s, epoch):
     )
     print("Average dismissal rate: ", batches_abort_rate_total / epoch)
 
-    if weights_and_biases:
+    if logging_active:
         wandb.config.update(
             {
                 "Average data transfer/epoch (MB): ": data_transfer_per_epoch
@@ -772,8 +822,8 @@ def initIID():
     subsets = [(X_train[subset.indices], y_train[subset.indices]) for subset in subsets]
 
     for idx, subset in enumerate(subsets):
-        pickle.dump(subset, open(f"train_dataset_{idx+1}.pkl", "wb"))
-        pickle.dump(val_dataset, open(f"val_dataset_{idx+1}.pkl", "wb"))
+        pickle.dump(subset, open(f"train_dataset_{idx}.pkl", "wb"))
+        pickle.dump(val_dataset, open(f"val_dataset_{idx}.pkl", "wb"))
     
 def poison_data(X_train, y_train):
     print("Malicious data poisoning activated for client", client_num)
@@ -1095,9 +1145,10 @@ def main():
         epoch,
     ) = (0, 0, 0, 0, 0)
     global flops_counter
+    global client_connected
     global mlb_path, scaler_path, ptb_path, output_path
     global lr, batchsize, host, port, max_recv, autoencoder, count_flops, model, num_classes, data_poisoning_prob, blending_factor, label_flipping_prob, record_latent_space, autoencoder_train
-    global average_setting, weights_and_biases, latent_space_image, mixed_dataset, IID_percentage, IID, latent_space_dir, client_num, num_clients, pretrain_this_client, malicious, data_poisoning_method
+    global average_setting, weights_and_biases, logging_active, exp_name, latent_space_image, mixed_dataset, IID_percentage, IID, latent_space_dir, client_num, num_clients, pretrain_this_client, malicious, data_poisoning_method
 
     cwd = os.path.dirname(os.path.abspath(__file__))
     cwd = os.path.dirname(cwd)
@@ -1114,16 +1165,15 @@ def main():
     # model = 'TCN'
 
     parser = argparse.ArgumentParser(description="Client")
-    parser.add_argument("--client_num", type=int, default=1)
-    parser.add_argument("--num_clients", type=int, default=1)
+    parser.add_argument("--init_client", action="store_true")
     parser.add_argument("--malicious", action="store_true")
-    parser.add_argument("--IID", type=int, default=1)
+    parser.add_argument("--IID", action="store_true")
     parser.add_argument("--average_setting", type=str, default="micro")
-    parser.add_argument("--weights_and_biases", type=int, default=1)
+    parser.add_argument("--weights_and_biases", action="store_true")
     args = parser.parse_args()
 
-    client_num = args.client_num
-    num_clients = args.num_clients
+    init_client = args.init_client
+    client_num = -1
     malicious = args.malicious
     IID = args.IID  # to use IID data like in the single client experiment
     average_setting = args.average_setting
@@ -1146,6 +1196,7 @@ def main():
     flops_counter = Flops.Flops(count_flops)
     model = data["Model"]
     num_classes = data["num_classes"]
+    num_clients = data["nr_clients"]
 
     # model poisoning parameters
     data_poisoning_prob = (
@@ -1158,70 +1209,60 @@ def main():
     label_flipping_prob = (
         data["label_flipping_prob"] if malicious else 0.0
     )
-    
-    print(f"CLIENT {client_num} IS MALICIUOS: {malicious}")
-    print(f"---- DPP: {data_poisoning_prob}")
-    print(f"---- ALPHA: {blending_factor}")
 
     # latent space analysis variables & dir for files
     record_latent_space = data["record_latent_space"]
     exp_name = None if data["exp_name"] == "" else data["exp_name"]
-
-    if record_latent_space:
-        latent_space_dir = os.path.join(
-            cwd, "latent_space", exp_name, "client_{}".format(client_num)
-        )
-        os.makedirs(latent_space_dir, exist_ok=True)
-        latent_space_image = reset_latent_space_image()
-            
-        # Check if a file callet metadata.pickle exists in the latent_space_dir
-        # If not, create a new file and write the metadata to it
-        # Otherwise do nothing
-        metadata_path = os.path.join(cwd, "latent_space", exp_name, "metadata.pickle")
-        if not os.path.isfile(metadata_path):	
-            metadata = {
-                "num_clients": data["nr_clients"],
-                "exp_name": exp_name,
-                "is_malicious": malicious,
-                "batchsize": batchsize,
-                "data_poisoning_prob": data["data_poisoning_prob"],
-                "label_flipping_prob": data["label_flipping_prob"],
-            }
-            with open(metadata_path, "wb") as handle:	
-                pickle.dump(metadata, handle, protocol=pickle.HIGHEST_PROTOCOL)	
-
-    if client_num == 1:
-        pretrain_this_client = data["pretrain_active"]
-    else:
-        pretrain_this_client = 0
     mixed_dataset = data["mixed_with_IID_data"]
     pretrain_epochs = data["pretrain_epochs"]
     IID_percentage = data["IID_percentage"]
     autoencoder_train = data["autoencoder_train"]
-    
-    # only log for the last client
-    weights_and_biases = weights_and_biases and client_num == num_clients
-
-    if weights_and_biases:
-        wandb.init(project="SL_Security", entity="mohkoh",name=exp_name)
-        wandb.init(
-            config={
-                "learning_rate": lr,
-                "batch_size": batchsize,
-                "autoencoder": autoencoder,
-            }
-        )
-        wandb.config.update({"learning_rate": lr, "PC: ": 2})
         
-    if client_num > 0:   
+    if not init_client:   
         print_json()
-        init_train_val_dataset()
-        init_nn_parameters()
 
         s = socket.socket()
         print("Start socket connect")
         s.connect((host, port))
         print("Socket connect success, to.", host, port)
+        client_connected = True
+        
+        while client_num == -1:
+            recieve_request(s)
+            
+        if client_num == 0:
+            pretrain_this_client = data["pretrain_active"]
+        else:
+            pretrain_this_client = 0
+            
+        logging_active = weights_and_biases and client_num == num_clients - 1
+        if logging_active:
+            wandb.init(project="SL_Security", entity="mohkoh",name=exp_name)
+            wandb.init(
+                config={
+                    "learning_rate": lr,
+                    "batch_size": batchsize,
+                    "autoencoder": autoencoder,
+                }
+            )
+            wandb.config.update({
+                "learning_rate": lr, 
+                "PC: ": 2,
+                "detect_anomalies": data["detect_anomalies"],
+                "detection_scheduler": data["detection_scheduler"],
+                "detection_tau": data["detection_tau"],
+                "detection_tolerance": data["detection_tolerance"],
+                "detection_window": data["detection_window"],
+                "detection_start": data["detection_start"],
+                "detection_similarity": data["detection_similarity"],
+                "detection_params": data["detection_params"],
+                "data_poisoning_prob": data["data_poisoning_prob"],
+                "data_poisoning_method": data["data_poisoning_method"],
+                "blending_factor": data["blending_factor"],
+                "label_flipping_prob": data["label_flipping_prob"],
+                "nr_clients": data["nr_clients"],
+                "num_malicious": data["num_malicious"],
+            })
 
         if pretrain_this_client:
             print("Pretrain active")
@@ -1232,7 +1273,33 @@ def main():
             Communication.send_msg(s, 2, initial_weights)
             Communication.send_msg(s, 3, 0)
             epoch = 0
-
+            
+        if record_latent_space:
+            latent_space_dir = os.path.join(
+                cwd, "latent_space", exp_name, "client_{}".format(client_num)
+            )
+            os.makedirs(latent_space_dir, exist_ok=True)
+            latent_space_image = reset_latent_space_image()
+                
+            # Check if a file callet metadata.pickle exists in the latent_space_dir
+            # If not, create a new file and write the metadata to it
+            # Otherwise do nothing
+            metadata_path = os.path.join(cwd, "latent_space", exp_name, "metadata.pickle")
+            if not os.path.isfile(metadata_path):	
+                metadata = {
+                    "num_clients": data["nr_clients"],
+                    "exp_name": exp_name,
+                    "is_malicious": malicious,
+                    "batchsize": batchsize,
+                    "data_poisoning_prob": data["data_poisoning_prob"],
+                    "label_flipping_prob": data["label_flipping_prob"],
+                }
+                with open(metadata_path, "wb") as handle:	
+                    pickle.dump(metadata, handle, protocol=pickle.HIGHEST_PROTOCOL)	
+        
+        init_train_val_dataset()
+        init_nn_parameters()
+        
         serverHandler(s)
     else:
         if IID:

@@ -111,7 +111,7 @@ def split_batch(batch):
     batch = [np.squeeze(t, axis=0) for t in batch]		
     return batch	
 
-def reset_latent_space_image(df=None):
+def reset_latent_space_image():
     df = pd.DataFrame(
         columns=[
             "client_output",
@@ -129,12 +129,73 @@ def reset_latent_space_image(df=None):
 def gaussian_kernel(d_ij, sigma=1):
     return np.exp(-(d_ij ** 2) / (2 * (sigma ** 2)))
 
-def medianAbsoluteDeviation(x, similarities, sigma=1):
-    med = x[similarities].median()
-    # ad = abs(x[similarities] - med)
-    # x[similarities] = ad / ad.sum()
-    x[similarities] = abs(x[similarities] - med)
-    x[similarities] = x[similarities].applymap(lambda x: gaussian_kernel(x, sigma))
+def normalize(x, cols):
+    x[cols] = x[cols] / np.sum(x[cols])
+    return x
+
+# def medianAbsoluteDeviation(x, similarities):
+    
+#     dataset = x[similarities].values
+
+#     # Step 1: Calculate the median
+#     median = np.median(dataset)
+
+#     # Step 2: Compute the MAD
+#     mad = np.median(np.abs(dataset - median))
+
+#     # Step 3: Calculate the Manhatten distance for each data point to the median
+#     manhatten_distances = np.abs(dataset - median)
+
+#     # Step 4: Normalize the distances under a gaussian kernel to penalize outliers
+#     normalized_contributions = gaussian_kernel(manhatten_distances, np.sqrt(mad/2))
+
+#     x[similarities] = normalized_contributions
+    
+#     return x
+    
+# def medianAbsoluteDeviation(x, similarities, sigma=1/2):
+#     med = x[similarities].median()
+#     x[similarities] = abs(x[similarities] - med)
+#     mad = x[similarities].median().values[0]
+#     x[similarities] = x[similarities].applymap(lambda x: gaussian_kernel(x, np.sqrt(mad/2)))
+#     return x
+
+# def medianAbsoluteDeviation(x, similarities):
+#     dataset = x[similarities].values
+    
+#     # Step 1: Calculate the median
+#     median = np.median(dataset)
+
+#     # Step 2: Compute the MAD
+#     mad = np.median(np.abs(dataset - median))
+
+#     # Step 3: Calculate the squared Mahalanobis distance for each data point
+#     mahalanobis_distances = ((dataset - median) / mad) ** 2
+
+#     # Step 4: Normalize the squared Mahalanobis distances
+#     normalized_contributions = 1 - mahalanobis_distances / np.sum(mahalanobis_distances)
+
+#     x[similarities] = normalized_contributions
+    
+#     return x
+
+def medianAbsoluteDeviation(x, similarities):
+    dataset = x[similarities].values
+    
+    # Step 1: Calculate the median
+    median = np.median(dataset)
+
+    # Step 2: Compute the MAD
+    mad = np.median(np.abs(dataset - median))
+
+    # Step 3: Calculate the modified Mahalanobis distance for each data point
+    mahalanobis_distances = np.exp(-np.abs(dataset - median)) / mad 
+
+    # Step 4: Normalize the modified Mahalanobis distances using the max distance
+    normalized_contributions = mahalanobis_distances / np.max(mahalanobis_distances)
+
+    x[similarities] = normalized_contributions
+    
     return x
 
 def softmaxScheduler(x, similarities):

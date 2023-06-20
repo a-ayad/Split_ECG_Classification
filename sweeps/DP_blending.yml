@@ -1,0 +1,33 @@
+method: grid
+metric:
+  name: AUPRC_val
+  goal: minimize
+parameters:
+  - name: num_malicious
+    type: int
+    values:
+      - 2
+      - 4
+      - 6
+      - 8
+      - 10
+  - name: data_poisoning_prob
+    type: float
+    values:
+      - 0.25
+      - 0.5
+      - 0.75
+      - 1.0
+  - name: blending_factor
+    type: float
+    values:
+      - 0.25
+      - 0.5
+      - 0.75
+  - name: data_poisoning_method
+    type: str
+    values:
+      - blending
+command:
+  - python3
+  - train.py

@@ -28,7 +28,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
-                "--num_clients", "10"
+                /// "--malicious_ids", "3", "6"
             ]
         }
     ]

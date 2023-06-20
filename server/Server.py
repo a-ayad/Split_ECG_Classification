@@ -1,3 +1,4 @@
+import argparse
 import socket
 import struct
 import pickle
@@ -16,11 +17,17 @@ import sys
 from sklearn.preprocessing import MinMaxScaler
 import zlib
 import os
+
+import wandb
 import ModelsServer
 import pandas as pd
 from security.analysis import *
 import security.utils as utils
 from tqdm import tqdm
+os.environ['PYDEVD_WARN_EVALUATION_TIMEOUT'] = '10'
+os.environ['PYDEVD_UNBLOCK_THREADS_TIMEOUT'] = '10'
+os.environ['PYDEVD_THREAD_DUMP_ON_WARN_EVALUATION_TIMEOUT'] = '10'
+os.environ['PYDEVD_INTERRUPT_THREAD_TIMEOUT'] = '10'
 
 # load data from json file
 #f = open('server/parameter_server.json', )
@@ -41,6 +48,8 @@ pretrain_active = data["pretrain_active"]
 update_mechanism = data["update_mechanism"]
 model = data["Model"]
 autoencoder_train = data["autoencoder_train"]
+exp_name = data["exp_name"]
+logging_active = True
 
 data_send_per_epoch = 0
 client_weights = 0
@@ -55,34 +64,53 @@ if detect_anomalies:
     latent_space_image = utils.reset_latent_space_image()
     detection_scores = pd.DataFrame()
     detection_tau = data["detection_tau"]
-    detection_sigma = data["detection_sigma"]
     detection_params = data["detection_params"]
     detection_similarity = data["detection_similarity"]
     detection_window = data["detection_window"]
     detection_start = data["detection_start"]
     detection_scheduler = data["detection_scheduler"]
+    detection_tolerance = data["detection_tolerance"]
+    blocked_list = [False] * numclients
+    hold_list = [False] * numclients
 
-def update_detection_scores(latent_space_image, detection_scores, epoch, stage="val"):
-    latent_space_image = latent_space_image[latent_space_image["stage"] == stage]
+def update_detection_scores(detection_scores, epoch, stage="train"):
+    global latent_space_image
     
-    df_scores = pd.DataFrame()
-    for client_id in tqdm(range(1, numclients + 1), desc="Client Detection Scores"):
-        client_score = per_epoch_scores(epoch, client_id, df=latent_space_image, similarities=[detection_similarity], **detection_params)
-        client_loss = latent_space_image[latent_space_image["client_id"] == client_id]["loss"].sum()
-        client_score[detection_similarity] = (1 / client_score[detection_similarity]).multiply(client_loss, axis=0)
-        df_scores = pd.concat([df_scores, client_score], ignore_index=True)
-    
+    df_latent = latent_space_image[latent_space_image["stage"] == stage]
+
+    # Per Client similarity scores
+    df_clients = client_scores(num_clients=numclients, num_workers=multiprocessing.cpu_count(), df_base=df_latent, epochs=[epoch], similarities=[detection_similarity], **detection_params)
+
     # Mean of all Labels
-    df_scores = df_scores.groupby(["client_id", "epoch"]).mean().reset_index()
-    
+    df_clients = df_clients.groupby(["client_id", "epoch"]).mean()
+
+    # Per Client loss contributions
+    df_lc = loss_contributions(df_latent, num_clients=numclients, epochs=[epoch], moment="mean")
+
+    # Ratio of Similarity to Loss
+    df_scores = df_clients.merge(df_lc, on=["epoch", "client_id"])
+    df_scores = df_scores.groupby("epoch").apply(lambda x: normalize(x, [detection_similarity, "loss"]))
+    df_scores[detection_similarity] = (1 / df_scores[detection_similarity]).multiply(df_scores["loss"], axis=0)
+
     # MAD under gaussian kernel
-    df_scores = df_scores.groupby("epoch").apply(lambda x: medianAbsoluteDeviation(x, similarities=[detection_similarity], sigma=detection_sigma))
-    
+    df_scores = df_scores.groupby("epoch").apply(lambda x: medianAbsoluteDeviation(x, similarities=[detection_similarity]))
+    df_scores.reset_index(inplace=True)
+
+    # df_scores = pd.DataFrame()
+    # for client_id in tqdm(range(1, numclients + 1), desc="Client Detection Scores"):
+    #     client_score = per_epoch_scores(epoch, client_id, df=latent_space_image, similarities=[detection_similarity], **detection_params)
+    #     client_loss = latent_space_image[latent_space_image["client_id"] == client_id]["loss"].sum()
+    #     client_score[detection_similarity] = (1 / client_score[detection_similarity]).multiply(client_loss, axis=0)
+    #     df_scores = pd.concat([df_scores, client_score], ignore_index=True)
+        
     # Taking Softmax of Scores
-    df_probs =  df_scores.groupby("epoch").apply(lambda x: softmaxScheduler(x, similarities=[detection_similarity]))   
-    df_scores["prob"] = df_probs[detection_similarity]
-    df_scores = df_scores[["client_id", "epoch", "prob"] + [detection_similarity]]
+    # df_scores["prob"] = df_scores.apply(lambda x: softmaxScheduler(x, similarities=[detection_similarity]))[detection_similarity]   
+    #df_scores = df_scores[["client_id", "epoch", "prob"] + [detection_similarity]]
+    df_scores = df_scores[["client_id", "epoch"] + [detection_similarity]]
     
+    print("Detection Scores for epoch: ", epoch)
+    print(df_scores)
+
     detection_scores = pd.concat([detection_scores, df_scores], axis=0, ignore_index=True)
         
     return detection_scores
@@ -91,27 +119,22 @@ def soft_threshold(client_id):
     if not detect_anomalies:
         return False
     else:
-        return get_detection_score(client_id) < detection_tau
+        return get_detection_score(client_id) < 2 * detection_tau
 
 def hard_threshold(client_id):
     if not detect_anomalies:
         return False
     else:
-        return get_detection_score(client_id) < 0.5 * detection_tau
+        return get_detection_score(client_id) < detection_tau
     
 def get_detection_score(client_id):
-    if len(detection_scores) == 0:
-        return 1.0
-    
-    max_epoch = detection_scores["epoch"].max()
-    
-    if not max_epoch > detection_start:
-        return 1.0
-    
     client_scores = detection_scores[detection_scores["client_id"] == client_id]
-    client_scores = client_scores[client_scores["epoch"] >= max_epoch - detection_window]
-    
-    return client_scores[detection_similarity].mean()
+    max_epoch = client_scores["epoch"].max()
+    if len(client_scores) == 0 or max_epoch < detection_start:
+        return 1.0
+    else:
+        client_scores = client_scores[client_scores["epoch"] > max_epoch - detection_window]
+        return client_scores[detection_similarity].mean()
     
 def get_update_probability(client_id):
     if len(detection_scores) == 0:
@@ -229,6 +252,7 @@ def get_testacc(conn, msg):
     :param conn: connection
     :param msg: message
     """
+    
     with torch.no_grad():
         client_output_test, label_test = msg['client_output_val/test'], msg['label_val/test']
         client_output_test, label_test = client_output_test.to(device), label_test.to(device)
@@ -243,8 +267,7 @@ def get_testacc(conn, msg):
         # Malicious Client Detection
         if detect_anomalies:
             global latent_space_image
-            epoch = msg['epoch']
-            client_id = msg['client_id']
+            client_id = connectedclients.index(conn)
             stage = msg['stage']
             batchsize = msg['batchsize']
             sample = {
@@ -275,10 +298,11 @@ def updateclientmodels(sock, updatedweights):
     :param updatedweights: the client side weghts with actual status
     """
     update_time = time.time()
-    client_id = connectedclients.index(sock) + 1
+    client_id = connectedclients.index(sock)
     print("Weights Update for Client: ", client_id)
-    if soft_threshold(client_id):
-        return
+    if detect_anomalies:
+        if hold_list[client_id] > 0:
+            return
     #client.load_state_dict(updatedweights)
     global client_weights
     global client_weights_available
@@ -368,8 +392,7 @@ def calc_gradients(conn, msg):
     loss_train = error(output_train, lbl_train)  # calculates cross-entropy loss
     
     # Malicious Client Detection
-    epoch = msg['epoch']
-    client_id = msg['client_id']
+    client_id = connectedclients.index(conn)
     if detect_anomalies:
         stage = msg['stage']
         sample = {
@@ -391,7 +414,10 @@ def calc_gradients(conn, msg):
     # print("client_grad_size: ", client_grad_backprop.size())
     client_grad = client_grad_backprop.detach().clone()
     
-    update_server = not soft_threshold(client_id)
+    if detect_anomalies:
+        update_server = blocked_list[client_id] == 0
+    else:
+        update_server = True
     
     if update_server:
         optimizer.step()
@@ -513,7 +539,6 @@ def test_client(conn, num_epochs):
 connectedclients = []
 trds = []
 
-
 def main():
     """
     initialize device, server model, initial client model, optimizer, loss, decoder and accepts new clients
@@ -594,41 +619,65 @@ def main():
             conn, addr = s.accept()
             connectedclients.append(conn)
             print('Conntected with', addr)
-
-    
+            send_request(conn, 5, i)	
+            print('Initialized with ID', i)
 
     print(connectedclients)
     global latent_space_image
-    global detection_scores
+    global detection_scores, blocked_list, hold_list
     for epoch in range(num_epochs):
         for c, client in enumerate(connectedclients):
-            print("Started Training + Val for Client: ", c+1)
-            if hard_threshold(c+1):
-                continue
-            print("init client: ", c+1)
+            if detect_anomalies:
+                if blocked_list[c]:
+                    print("Detected Malicious Client: ", c, " - Skipping Training")
+                    continue
+            print("Started Training + Val for Client: ", c)
+            print("init client: ", c)
             initialize_client(client)
-            print("train_client: ", c+1)
+            print("train_client: ", c)
             train_client_for_one_epoch(client)
             #print("test client: ", c + 1)
             #test_client(client, num_epochs)
         if detect_anomalies:
-            detection_scores = update_detection_scores(latent_space_image, detection_scores, epoch=epoch)
-            latent_space_image = utils.reset_latent_space_image(latent_space_image)
+            detection_scores = update_detection_scores(detection_scores, epoch=epoch)
+            latent_space_image = utils.reset_latent_space_image()
+            hard_thresholds = [hard_threshold(client_id) for client_id in range(numclients)]
+            hold_list = [(hold_list[i] + hard_thresholds[i]) * hard_thresholds[i] for i in range(numclients)]
+            blocked_list = [hold_list[i] > detection_tolerance for i in range(numclients)]
+            
+            # Choose logger
+            logger_id = len(blocked_list) - blocked_list[::-1].index(False) - 1
+            for client_id in range(numclients):
+                if client_id == logger_id:
+                    send_request(connectedclients[client_id], 4, True)	
+                else:
+                    send_request(connectedclients[client_id], 4, False)
+            
+    if logging_active and detect_anomalies:
+        wandb.init(project="SL_Security", entity="mohkoh",name=exp_name, resume=True)
+        print("Logging Detection Scores")
+        xs = range(1, num_epochs + 1)
+        ys = detection_scores.sort_values(by="epoch").groupby("client_id")[detection_similarity].apply(list).to_list()
+        wandb.log({f"{exp_name}" : wandb.plot.line_series(
+                    xs=xs, 
+                    ys=ys,
+                    keys=[f"client_{client_id}" for client_id in range(numclients)],
+                    title="Detection Scores",
+                    xname="Epoch")})
 
-    print("init client: ", numclients)
+    
+    print("init client: ", numclients - 1)
     initialize_client(connectedclients[-1])
-    print("test client: ", numclients)
+    print("test client: ", numclients - 1)
     test_client(connectedclients[-1], num_epochs)
-    time.sleep(15) #Waiting until Wandb sync is finished
-        #t = Thread(target=clientHandler, args=(conn, addr))
-        #print('Thread established')
-        #trds.append(t)
-        #t.start()
-        #print('Thread start')
+    
+    for client in connectedclients:
+        send_request(client, 6, 0)
+    
+    time.sleep(15)
 
-    #for t in trds:
-    #    t.join()
+    for client in connectedclients:
+        client.close()
 
-
-if __name__ == '__main__':
+if __name__ == '__main__':    
     main()

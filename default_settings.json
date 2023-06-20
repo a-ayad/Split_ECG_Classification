@@ -1,20 +1,26 @@
 {
     "host": "localhost",
-    "port": 39301,
-    "max_recv": 8192,
+    "port": 10000,
+    "max_recv": 8192, 
+
     "batchsize": 64,
-    "learningrate": 0.001,
+    "learningrate": 0.001, 
     "(Comment): Learnrate for CNN": 0.0005,
+
     "Model": "CNN",
     "(Comment): For Model, TCN and CNN are viable": 0,
+
     "autoencoder": 1,
     "autoencoder_train": 1,
     "count_flops": 0,
+
     "epochs": 30,
     "update_mechanism": "static",
     "(Comment): use static to set an update_threshold manually, any other value will result in the mechanism being used": 0,
     "update_threshold": 0,
     "mechanism": "sigmoid",
+
+    
     "(Comment): To use multiple clients increase the nr_clients to more than 1": 0,
     "nr_clients": 10,
     "(Comment): Settings for non-IID & multiple clients:": 0,
@@ -23,13 +29,16 @@
     "pretrain_epochs": 30,
     "mixed_with_IID_data": 0,
     "IID_percentage": 0.1,
+
+
     "record_latent_space": false,
     "exp_name": "",
-    "num_malicious": 2,
+    "num_malicious": 0,
     "data_poisoning_prob": 0.0,
     "data_poisoning_method": "flat",
     "blending_factor": 0.0,
-    "label_flipping_prob": 0.25,
+    "label_flipping_prob": 0.0,
+
     "detect_anomalies": false,
     "detection_scheduler": false,
     "detection_tau": 0.8,
@@ -41,7 +50,6 @@
         "method": "similarity",
         "pooling": "average",
         "split": "knn_10_euclidean"
-    },
-    "learnrate_cnn": 0.0005,
-    "model": "CNN"
+    }
 }
+

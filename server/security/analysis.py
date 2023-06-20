@@ -90,9 +90,10 @@ def per_class_similarities(X_c, similarities=["cosine"], aggregate="mean"):
         df_scores[s] = df_scores[s].apply(agg)
     return df_scores
 
-def per_epoch_scores(epoch, client_id, base_path=None, df=None, method="density", pooling="average", split="min", **kwargs):
-    if base_path is not None:
-        df = pd.read_pickle(os.path.join(base_path, f"client_{client_id}", f"epoch_{epoch}.pickle"))
+def per_epoch_scores(df_group, method="density", pooling="average", split="min", **kwargs):
+    client_id, epoch = df_group[0]
+    df = df_group[1]
+
     X_c = split_labels(df, split)
     X_c.client_output = pool_latent_vectors(X_c.client_output.to_list(), pooling=pooling).tolist()
     X_c.reset_index(drop=True, inplace=True)
@@ -109,43 +110,82 @@ def per_epoch_scores(epoch, client_id, base_path=None, df=None, method="density"
 
 def per_client_scores(client_id, epochs, **kwargs):
     df_scores = pd.DataFrame()
+    
+    if isinstance(epochs, int):
+        epochs_iter = range(1, epochs + 1)
+    elif isinstance(epochs, list):
+        epochs_iter = epochs
+    
     with tqdm(total=epochs, desc=f"Client {client_id}", position=client_id, leave=False) as pbar:
-        for epoch in range(1, epochs + 1):
+        for epoch in epochs_iter:
             df_scores = pd.concat([df_scores, per_epoch_scores(client_id, epoch, **kwargs)], ignore_index=True)
             pbar.update(1)
     df_scores["client_id"] = client_id
     return df_scores
 
-def client_scores(num_clients, epochs, num_workers=5, **kwargs):
-    df_scores = pd.DataFrame()
+def client_scores(df_base, num_clients, epochs, num_workers=5, **kwargs):
+    # Load data
+    if isinstance(epochs, int):
+        epochs_iter = range(1, epochs + 1)
+    elif isinstance(epochs, list):
+        epochs_iter = epochs
+        
+    if isinstance(df_base, pd.DataFrame):
+        df = df_base[(df_base.client_id < num_clients) & (df_base.epoch.isin(epochs_iter))]
+    elif isinstance(df_base, str):
+        df = pd.DataFrame()
+        for idx in tqdm(range(num_clients), desc=f"Load Client Data Frames"):
+            for epoch in epochs_iter:
+                client_path = os.path.join(df_base, "client_" + str(idx))
+                df_epoch = pd.read_pickle(os.path.join(client_path, "epoch_{}.pickle".format(epoch)))
+                df_epoch["client_id"] = idx
+                df = pd.concat([df, df_epoch], axis=0, ignore_index=True)
     
-    for client_id in range(1, num_clients + 1):
-        partial_per_epoch_scores = partial(per_epoch_scores, client_id=client_id, **kwargs)
+    df_scores = pd.DataFrame()
+    df_groups = df.groupby(["client_id", "epoch"])
+    
+    partial_per_epoch_scores = partial(per_epoch_scores, **kwargs)
+    
     # Compute in parallel
-        with closing(multiprocessing.Pool(processes=num_workers)) as p:
-            with tqdm(total=epochs, desc=f"Client {client_id}") as pbar:
-                for r in p.imap_unordered(partial_per_epoch_scores, np.arange(1, epochs+1)):
-                    df_scores = pd.concat([df_scores, r], ignore_index=True, copy=False)
-                    pbar.update()
+    with closing(multiprocessing.Pool(processes=num_workers)) as p:
+        with tqdm(total=df_groups.ngroups, desc=f"|Client x Epoch|") as pbar:
+            for r in p.imap_unordered(partial_per_epoch_scores, df_groups):
+                df_scores = pd.concat([df_scores, r], ignore_index=True, copy=False)
+                pbar.update()
     p.join()
     
     return df_scores
 
-def loss_contributions(base_path, metadata, epochs=30, moment="mean"):
+def loss_contributions(df_base, num_clients, epochs=30, moment="mean"):
     df_clients_loss = pd.DataFrame(columns=["client_id", "epoch", "loss"])
-    for idx in tqdm(range(1, metadata["num_clients"] + 1)):
-        client_path = os.path.join(base_path, "client_" + str(idx))
-        for epoch in range(1, epochs + 1):
-            df = pd.read_pickle(os.path.join(client_path, "epoch_{}.pickle".format(epoch)))
-            if moment == "mean":
-                loss_moment = df.loss.mean()
-            elif moment == "std" or moment == "var":
-                loss_moment = df.loss.var()
-                if moment == "std":
-                    loss_moment = np.sqrt(loss_moment)
-            elif moment == "sum":
-                loss_moment = df.loss.sum()	
-            elif moment == "median":
-                loss_moment = df.loss.median()
-            df_clients_loss.loc[len(df_clients_loss), df_clients_loss.columns] = [idx, epoch, loss_moment]
+    
+    if isinstance(epochs, int):
+        epochs_iter = range(1, epochs + 1)
+    elif isinstance(epochs, list):
+        epochs_iter = epochs
+        
+    if isinstance(df_base, pd.DataFrame):
+        df = df_base[(df_base.client_id < num_clients) & (df_base.epoch.isin(epochs_iter))]
+    elif isinstance(df_base, str):
+        df = pd.DataFrame()
+        for idx in tqdm(range(num_clients), desc=f"Load Client Data Frames"):
+            for epoch in epochs_iter:
+                client_path = os.path.join(df_base, "client_" + str(idx))
+                df_epoch = pd.read_pickle(os.path.join(client_path, "epoch_{}.pickle".format(epoch)))
+                df_epoch["client_id"] = idx
+                df = pd.concat([df, df_epoch], axis=0, ignore_index=True)
+        
+    df_clients_loss = df_base.groupby(["client_id", "epoch"])
+    
+    if moment == "mean":
+        df_clients_loss = df_clients_loss.loss.mean()
+    elif moment == "std" or moment == "var":
+        df_clients_loss = df_clients_loss.loss.var()
+        if moment == "std":
+            df_clients_loss = np.sqrt(df_clients_loss)
+    elif moment == "sum":
+        df_clients_loss = df_clients_loss.loss.sum().astype(np.float32)
+    elif moment == "median":
+        df_clients_loss = df_clients_loss.loss.median()
+        
     return df_clients_loss

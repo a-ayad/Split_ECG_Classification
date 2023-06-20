@@ -9,7 +9,7 @@ import os
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Multi Client Launcher')
-    parser.add_argument('--num_clients', type=int, default=1, help='Number of clients to launch')
+    parser.add_argument('--malicious_ids',type=int, nargs='+', help='Ids of malicious clients')
     args = parser.parse_args()
     
     f = open(
@@ -17,19 +17,22 @@ if __name__ == '__main__':
     )
     data = json.load(f)
     num_malicious = data["num_malicious"]
+    num_clients = data["nr_clients"]
     
-    # selects num_malicious numbers out of range(1, args.num_clients + 1)
-    malicious_ids = list(np.random.choice(range(1, args.num_clients + 1), num_malicious, replace=False))
+    # selects num_malicious numbers out of range(args.num_clients)
+    malicious_ids = args.malicious_ids
+    if not malicious_ids:
+        malicious_ids = list(np.random.choice(range(num_clients), num_malicious, replace=False))
     
     # Initialize clients datasets
-    os.system("python3 client/Client.py --client_num 0 " + " --num_clients " + str(args.num_clients))
+    os.system("python3 client/Client.py --init_client --IID ")
     
     cmd = ""
     
-    for i in range(1, args.num_clients + 1):
-        if i > 1 :
+    for i in range(num_clients):
+        if i > 0 :
             cmd += " & "
-        cmd += "python3 client/Client.py --client_num " + str(i) + " --num_clients " + str(args.num_clients)
+        cmd += "python3 client/Client.py " + " --IID --weights_and_biases --average_setting micro "
         
         if i in malicious_ids:
             cmd += " --malicious"
