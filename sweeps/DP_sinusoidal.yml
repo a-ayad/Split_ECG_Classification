@@ -1,33 +1,26 @@
+program: train.py
 method: grid
 metric:
   name: AUPRC_val
   goal: minimize
 parameters:
-  - name: num_malicious
-    type: int
+  num_malicious:
     values:
       - 2
       - 4
       - 6
       - 8
       - 10
-  - name: data_poisoning_prob
-    type: float
+  data_poisoning_prob:
     values:
       - 0.25
       - 0.5
       - 0.75
       - 1.0
-  - name: blending_factor
-    type: float
+  blending_factor:
     values:
       - 0.5
       - 1.0
       - 1.5
-  - name: data_poisoning_method
-    type: str
-    values:
-      - sinusoidal
-command:
-  - python3
-  - train.py
+  data_poisoning_method:
+    value: sinusoidal
