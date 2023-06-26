@@ -63,6 +63,7 @@ detect_anomalies = data["detect_anomalies"]
 if detect_anomalies:
     latent_space_image = utils.reset_latent_space_image()
     detection_scores = pd.DataFrame()
+    detection_states = pd.DataFrame(columns=["epoch"] + ["client_" + str(i) for i in range(numclients)]).set_index("epoch")
     detection_tau = data["detection_tau"]
     detection_params = data["detection_params"]
     detection_similarity = data["detection_similarity"]
@@ -629,6 +630,7 @@ def main():
         for c, client in enumerate(connectedclients):
             if detect_anomalies:
                 if blocked_list[c]:
+                    send_request(client, 7, )
                     print("Detected Malicious Client: ", c, " - Skipping Training")
                     continue
             print("Started Training + Val for Client: ", c)
@@ -644,6 +646,8 @@ def main():
             hard_thresholds = [hard_threshold(client_id) for client_id in range(numclients)]
             hold_list = [(hold_list[i] + hard_thresholds[i]) * hard_thresholds[i] for i in range(numclients)]
             blocked_list = [hold_list[i] > detection_tolerance for i in range(numclients)]
+            states_list = [1 - (bool(hold_list[i]) or bool(blocked_list)) - bool(blocked_list) for i in range(numclients)]
+            detection_states.loc[len(detection_states)] = states_list
             
             # Choose logger
             logger_id = len(blocked_list) - blocked_list[::-1].index(False) - 1
@@ -654,8 +658,12 @@ def main():
                     send_request(connectedclients[client_id], 4, False)
             
     if logging_active and detect_anomalies:
-        wandb.init(project="SL_Security", entity="mohkoh",name=exp_name, resume=True)
-        print("Logging Detection Scores")
+        with open("run_id.json", "r") as file:
+            wandb.init(id=json.load(file)["run_id"], resume="must")
+        file.close()
+        print("Logging Detection Scores and States")
+        
+        # Detection Score Plot
         xs = range(1, num_epochs + 1)
         ys = detection_scores.sort_values(by="epoch").groupby("client_id")[detection_similarity].apply(list).to_list()
         wandb.log({f"{exp_name}" : wandb.plot.line_series(
@@ -663,6 +671,15 @@ def main():
                     ys=ys,
                     keys=[f"client_{client_id}" for client_id in range(numclients)],
                     title="Detection Scores",
+                    xname="Epoch")})
+        
+        # Detection States Plot
+        ys = [detection_states.iloc[i].to_list() for i in range(len(detection_states))]
+        wandb.log({f"{exp_name}" : wandb.plot.line_series(
+                    xs=xs, 
+                    ys=ys,
+                    keys=detection_states.columns.to_list(),
+                    title="Detection States",
                     xname="Epoch")})
 
     
@@ -678,6 +695,9 @@ def main():
 
     for client in connectedclients:
         client.close()
+        
+    if logging_active:
+        os.remove("run_id.json")
 
 if __name__ == '__main__':    
     main()

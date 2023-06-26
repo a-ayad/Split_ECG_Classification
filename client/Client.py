@@ -153,7 +153,7 @@ def handle_request(sock, getid, content):
         3: test_stage,
         4: change_logging,
         5: set_id,
-        6: close_connection,
+        6: close_connection
     }
     switcher.get(getid, "invalid request recieved")(sock, content)
     
@@ -179,7 +179,9 @@ def change_logging(s, state):
         logging_active = state
         print(f"To new state: {logging_active}")
         if logging_active:
-            wandb.init(project="SL_Security", entity="mohkoh",name=exp_name, resume=True)
+            with open("run_id.json", "r") as file:
+                wandb.init(id=json.load(file)["run_id"], resume="must")
+            file.close()
 
 def serverHandler(conn):
     global client_connected
@@ -1237,14 +1239,16 @@ def main():
             
         logging_active = weights_and_biases and client_num == num_clients - 1
         if logging_active:
-            wandb.init(project="SL_Security", entity="mohkoh",name=exp_name)
-            wandb.init(
-                config={
+            wandb.init(project="SL_Security", entity="mohkoh",name=exp_name, config={
                     "learning_rate": lr,
                     "batch_size": batchsize,
                     "autoencoder": autoencoder,
-                }
-            )
+                })
+            
+            with open("run_id.json", "w") as file:
+                json.dump({"run_id": wandb.run.id}, file, indent=4)
+            file.close()
+            
             wandb.config.update({
                 "learning_rate": lr, 
                 "PC: ": 2,
