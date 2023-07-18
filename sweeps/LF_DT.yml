@@ -1,0 +1,34 @@
+program: train.py
+method: grid
+# early_terminate:
+#   type: hyperband
+#   min_iter: 10
+metric:
+  name: AUC_test.max
+  goal: maximize
+command:
+  - ${env}
+  - python3
+  - ${program}
+  - ${args}
+  - --detect_anomalies
+parameters:
+  num_malicious: 
+    values:
+      - 2
+      - 4
+      - 6
+      - 8
+      - 10
+  detection_tau:
+    values:
+      - 0.8
+      - 0.9
+  detection_tolerance:
+    value: 3
+  detection_window:
+    value: 5
+  detection_start:
+    value: 0
+  label_flipping_prob:
+    value: 0.25

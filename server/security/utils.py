@@ -189,8 +189,8 @@ def medianAbsoluteDeviation(x, similarities):
     mad = np.median(np.abs(dataset - median))
 
     # Step 3: Calculate the modified Mahalanobis distance for each data point
-    mahalanobis_distances = np.exp(-np.abs(dataset - median)) / mad 
-
+    mahalanobis_distances = np.exp(-((dataset - median) ** 2) / mad)
+    
     # Step 4: Normalize the modified Mahalanobis distances using the max distance
     normalized_contributions = mahalanobis_distances / np.max(mahalanobis_distances)
 

@@ -19,7 +19,6 @@ import Models
 import Flops
 import pandas as pd
 import argparse
-import wandb
 import Communication
 import warnings
 
@@ -54,27 +53,37 @@ class PTB_XL(Dataset):
 
 
 def init_train_val_dataset():
-    X_train, y_train = pickle.loads(open(f"train_dataset_{client_num}.pkl", "rb").read())
-    
+    X_train, y_train = pickle.loads(
+        open(f"train_dataset_{client_num}.pkl", "rb").read()
+    )
+
     if malicious:
         X_train, y_train = poison_data(X_train, y_train)
-        
+
     train_dataset = PTB_XL(X_train, y_train, stage="train")
     val_dataset = pickle.loads(open(f"val_dataset_{client_num}.pkl", "rb").read())
-    
+
     os.remove(f"train_dataset_{client_num}.pkl")
     os.remove(f"val_dataset_{client_num}.pkl")
 
     global train_loader
     global val_loader
-    
+
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batchsize, shuffle=True, num_workers=multiprocessing.cpu_count()
+        train_dataset,
+        batch_size=batchsize,
+        shuffle=True,
+        num_workers=multiprocessing.cpu_count(),
     )
-    
+
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=batchsize, shuffle=False, num_workers=multiprocessing.cpu_count()
+        val_dataset,
+        batch_size=batchsize,
+        shuffle=False,
+        num_workers=multiprocessing.cpu_count(),
     )
+
+
 #     raw_dataset = PTB_XL("raw")
 #     train_dataset = PTB_XL("train")
 #     val_dataset = PTB_XL("val")
@@ -151,37 +160,24 @@ def handle_request(sock, getid, content):
         1: train_epoch,
         2: val_stage,
         3: test_stage,
-        4: change_logging,
         5: set_id,
-        6: close_connection
+        6: close_connection,
     }
     switcher.get(getid, "invalid request recieved")(sock, content)
-    
+
+
 def close_connection(s, content):
     global client_connected
     client_connected = False
 
-def set_id(s, id):
-    global client_num
-    client_num = id
-    print(f"INITIALIZED CLIENT {client_num}, MALICIUOS: {malicious}")
-    
-    if malicious:
-        print(f"---- LFP: {label_flipping_prob}")
-        print(f"---- DPP: {data_poisoning_prob}")
-        print(f"---- ALPHA: {blending_factor}")
-        print(f"---- METHOD: {data_poisoning_method}")
 
-def change_logging(s, state):
-    global logging_active, weights_and_biases
-    if logging_active != state and weights_and_biases:
-        print(f"Changed logging state of client {client_num} from: {logging_active}")
-        logging_active = state
-        print(f"To new state: {logging_active}")
-        if logging_active:
-            with open("run_id.json", "r") as file:
-                wandb.init(id=json.load(file)["run_id"], resume="must")
-            file.close()
+def set_id(s, msg):
+    global client_num, malicious
+    client_num = msg["id"]
+    malicious = msg["malicious"]
+    
+    print(f"INITIALIZED CLIENT {client_num}, MALICIUOS: {malicious}")
+
 
 def serverHandler(conn):
     global client_connected
@@ -242,7 +238,7 @@ def train_epoch(s, pretraining):
             break
 
         flops_counter.read_counter("rest")
-        
+
         optimizer = AdamW(client.parameters(), lr=lr)
 
         optimizer.zero_grad()  # sets gradients to 0 - start for backprop later
@@ -266,8 +262,8 @@ def train_epoch(s, pretraining):
             "label_train": label_train,  # concat_labels,
             "batchsize": batchsize,
             "epoch": epoch,
-            "stage": "train"
-            }
+            "stage": "train",
+        }
 
         if record_latent_space:
             # Save pooled vector for analysis
@@ -287,8 +283,14 @@ def train_epoch(s, pretraining):
         msg = Communication.recieve_msg(s)  # Recieve message from server
 
         if pretraining == 0:
-            if logging_active:
-                wandb.log({"dropout_threshold": msg["dropout_threshold"]}, commit=False)
+            Communication.send_msg(
+                s,
+                4,
+                {
+                    "action": "log",
+                    "payload": {"dropout_threshold": msg["dropout_threshold"]},
+                },
+            )
 
         # decode grad:
         client_grad_without_encode = msg["client_grad_without_encode"]
@@ -306,14 +308,14 @@ def train_epoch(s, pretraining):
         if client_grad == "abort":  # If the client update got aborted
             batches_aborted += 1
 
-            #if record_latent_space:
+            # if record_latent_space:
             #    sample["grad_client"] = utils.split_batch(torch.zeros_like(client_grad))
 
         else:
             flops_counter.read_counter("rest")
             client_output_backprop.backward(client_grad_decode)  # Backpropagation
 
-            #if record_latent_space:
+            # if record_latent_space:
             #    sample["grad_client"] = utils.split_batch(client_grad_decode)
 
             optimizer.step()
@@ -359,6 +361,7 @@ def train_epoch(s, pretraining):
     epoch_endtime = time.time() - epoch_start_time
     epoch_evaluation(
         total_train_nr,
+        s,
         train_loss,
         batches_aborted,
         epoch_endtime,
@@ -381,6 +384,7 @@ def train_epoch(s, pretraining):
 
 def epoch_evaluation(
     total_train_nr,
+    s,
     train_loss,
     batches_aborted,
     epoch_endtime,
@@ -448,20 +452,25 @@ def epoch_evaluation(
             print("MegaFLOPS_send", flops_counter.flops_send / 1000000)
             print("MegaFLOPS_recieve", flops_counter.flops_recieve / 1000000)
 
-        if logging_active and count_flops:
-            wandb.log(
+
+        if count_flops:
+            Communication.send_msg(
+                s,
+                4,
                 {
-                    "Batches Abortrate": batches_aborted / total_train_nr,
-                    "MegaFLOPS Client Encoder": flops_counter.flops_encoder_epoch
-                    / 1000000,
-                    "MegaFLOPS Client Forward": flops_counter.flops_forward_epoch
-                    / 1000000,
-                    "MegaFLOPS Client Backprop": flops_counter.flops_backprop_epoch
-                    / 1000000,
-                    "MegaFLOPS Send": flops_counter.flops_send / 1000000,
-                    "MegaFLOPS Recieve": flops_counter.flops_recieve / 1000000,
+                    "action": "log",
+                    "payload": {
+                        "Batches Abortrate": batches_aborted / total_train_nr,
+                        "MegaFLOPS Client Encoder": flops_counter.flops_encoder_epoch
+                        / 1000000,
+                        "MegaFLOPS Client Forward": flops_counter.flops_forward_epoch
+                        / 1000000,
+                        "MegaFLOPS Client Backprop": flops_counter.flops_backprop_epoch
+                        / 1000000,
+                        "MegaFLOPS Send": flops_counter.flops_send / 1000000,
+                        "MegaFLOPS Recieve": flops_counter.flops_recieve / 1000000,
+                    },
                 },
-                commit=False,
             )
 
         global auc_train_log, auprc_train_log, accuracy_train_log, f1_train_log, batches_abort_rate_total
@@ -530,7 +539,7 @@ def val_stage(s, pretraining=0):
                     "epoch": [epoch] * val_batchsize,
                     "step": [b_t] * val_batchsize,
                     "stage": ["val"] * val_batchsize
-                    #"grad_client": utils.split_batch(torch.zeros_like(output_val)),
+                    # "grad_client": utils.split_batch(torch.zeros_like(output_val)),
                 }
                 df_batch = pd.DataFrame(sample)
                 latent_space_image = pd.concat(
@@ -570,25 +579,25 @@ def val_stage(s, pretraining=0):
     )
     print("status_val: ", status_train)
 
-    if pretraining == 0 and logging_active:
-        wandb.define_metric("AUC_val", summary="max")
-        wandb.define_metric("Accuracy_val", summary="max")
-        wandb.define_metric("F1_val", summary="max")
-        # wandb.log({"AUC_val_max": epoch_auc, "Accuracy_val_max": epoch_accuracy}, commit=False)
-        wandb.log(
+    if pretraining == 0:
+        Communication.send_msg(
+            s,
+            4,
             {
-                "Loss_val": val_loss_total / total_val_nr,
-                "Accuracy_val": epoch_accuracy,
-                "F1_val": epoch_f1,
-                "AUC_val": epoch_auc,
-                "AUPRC_val": epoch_auprc,
-                "AUC_train": auc_train_log,
-                "AUPRC_train": auprc_train_log,
-                "Accuracy_train": accuracy_train_log,
-                "F1_train": f1_train_log,
-            }
+                "action": "log",
+                "payload": {
+                    "Loss_val": val_loss_total / total_val_nr,
+                    "Accuracy_val": epoch_accuracy,
+                    "F1_val": epoch_f1,
+                    "AUC_val": epoch_auc,
+                    "AUPRC_val": epoch_auprc,
+                    "AUC_train": auc_train_log,
+                    "AUPRC_train": auprc_train_log,
+                    "Accuracy_train": accuracy_train_log,
+                    "F1_train": f1_train_log,
+                },
+            },
         )
-        print("!!!!!!!! Logging Client: ", client_num)
 
     if not pretraining:
         client.to("cpu")  # free up some gpu memory
@@ -598,8 +607,11 @@ def val_stage(s, pretraining=0):
 
     # Save current latent space image
     if record_latent_space:
-        latent_space_image.to_pickle(os.path.join(latent_space_dir, f"epoch_{epoch}.pickle"))
+        latent_space_image.to_pickle(
+            os.path.join(latent_space_dir, f"epoch_{epoch}.pickle")
+        )
         latent_space_image = reset_latent_space_image(latent_space_image)
+
 
 def test_stage(s, epoch):
     """
@@ -607,11 +619,12 @@ def test_stage(s, epoch):
     :param s: socket
     :param epoch: current epoch
     """
+    global latent_space_image
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     client.to(device)
     encode.to(device)
-    
+
     total_test_nr, test_loss_total = 0, 0
     (
         precision_epoch,
@@ -663,7 +676,7 @@ def test_stage(s, epoch):
                     "epoch": [epoch] * test_batchsize,
                     "step": [b_t] * test_batchsize,
                     "stage": ["test"] * test_batchsize
-                    #"grad_client": utils.split_batch(torch.zeros_like(output_val)),
+                    # "grad_client": utils.split_batch(torch.zeros_like(output_val)),
                 }
                 df_batch = pd.DataFrame(sample)
                 latent_space_image = pd.concat(
@@ -702,20 +715,21 @@ def test_stage(s, epoch):
         epoch_auc, epoch_auprc, epoch_accuracy, epoch_f1
     )
     print("status_test: ", status_train)
-    
-    if logging_active:
-        wandb.define_metric("AUC_test", summary="max")
-        wandb.define_metric("Accuracy_test", summary="max")
-        wandb.define_metric("F1_test", summary="max")
-        wandb.log(
-            {
+
+    Communication.send_msg(
+        s,
+        4,
+        {
+            "action": "log",
+            "payload": {
                 "Loss_test": test_loss_total / total_test_nr,
                 "Accuracy_test": epoch_accuracy,
                 "F1_test": epoch_f1,
                 "AUC_test": epoch_auc,
                 "AUPRC_test": epoch_auprc,
-            }
-        )
+            },
+        },
+    )
 
     global data_send_per_epoch_total, data_recieved_per_epoch_total, batches_abort_rate_total
     total_flops_model = (
@@ -743,9 +757,12 @@ def test_stage(s, epoch):
     )
     print("Average dismissal rate: ", batches_abort_rate_total / epoch)
 
-    if logging_active:
-        wandb.config.update(
-            {
+    Communication.send_msg(
+        s,
+        4,
+        {
+            "action": "config",
+            "payload": {
                 "Average data transfer/epoch (MB): ": data_transfer_per_epoch
                 / epoch
                 / 1000000,
@@ -755,9 +772,10 @@ def test_stage(s, epoch):
                 "total_MegaFLOPS_backprob": flops_client_backprop_total / 1000000,
                 "total_MegaFLOPS model": total_flops_model / 1000000,
                 "total_MegaFLOPS": total_flops_all / 1000000,
-            }
-        )
-
+            },
+        },
+    )
+    
     Communication.send_msg(s, 3, 0)
 
 
@@ -813,25 +831,28 @@ def initIID():
 
     X_train = utils.apply_standardizer(X_train, standard_scaler)
     X_val = utils.apply_standardizer(X_val, standard_scaler)
-    
+
     train_dataset = PTB_XL(X_train, y_train, stage="train")
     val_dataset = PTB_XL(X_val, y_val, stage="val")
-    
-    # divides the numpy array X_train into num_clients subsets of equal size        
+
+    # divides the numpy array X_train into num_clients subsets of equal size
     subsets = torch.utils.data.random_split(
-        train_dataset, [1/num_clients] * num_clients, generator=torch.Generator().manual_seed(42)
+        train_dataset,
+        [1 / num_clients] * num_clients,
+        generator=torch.Generator().manual_seed(42),
     )
     subsets = [(X_train[subset.indices], y_train[subset.indices]) for subset in subsets]
 
     for idx, subset in enumerate(subsets):
         pickle.dump(subset, open(f"train_dataset_{idx}.pkl", "wb"))
         pickle.dump(val_dataset, open(f"val_dataset_{idx}.pkl", "wb"))
-    
+
+
 def poison_data(X_train, y_train):
     print("Malicious data poisoning activated for client", client_num)
     # model poisoning
     point_mask = np.random.uniform(size=X_train.shape[0]) <= data_poisoning_prob
-    
+
     if point_mask.sum() > 0:
         # Randomly change points
         # x_train[point_mask] = torch.randn(
@@ -839,26 +860,38 @@ def poison_data(X_train, y_train):
         #     dtype=x_train.dtype,
         #     device=x_train.device,
         # )
-        
+
         if data_poisoning_method == "blend":
-            #Blend normal samples with abnormal samples, and vice versa
+            # Blend normal samples with abnormal samples, and vice versa
             print("Poisoning data with blending")
             data_poisoned = X_train[point_mask]
             data_poisoned.shape
             Y_poisoned = y_train[point_mask]
-            
+
             normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
             abnormal_mask = ~normal_mask
-            
+
             normal_data = data_poisoned[normal_mask]
             abnormal_data = data_poisoned[abnormal_mask]
-            
-            abnormal_samples = abnormal_data[np.random.choice(abnormal_data.shape[0], normal_data.shape[0], replace=True)]
-            normal_samples = normal_data[np.random.choice(normal_data.shape[0], abnormal_data.shape[0], replace=True)]
-            
-            normal_data = blending_factor * normal_data + (1 - blending_factor) * abnormal_samples
-            abnormal_data = blending_factor * abnormal_data + (1 - blending_factor) * normal_samples
-            
+
+            abnormal_samples = abnormal_data[
+                np.random.choice(
+                    abnormal_data.shape[0], normal_data.shape[0], replace=True
+                )
+            ]
+            normal_samples = normal_data[
+                np.random.choice(
+                    normal_data.shape[0], abnormal_data.shape[0], replace=True
+                )
+            ]
+
+            normal_data = (
+                blending_factor * normal_data + (1 - blending_factor) * abnormal_samples
+            )
+            abnormal_data = (
+                blending_factor * abnormal_data + (1 - blending_factor) * normal_samples
+            )
+
             data_poisoned[normal_mask] = normal_data
             data_poisoned[abnormal_mask] = abnormal_data
             X_train[point_mask] = data_poisoned
@@ -868,14 +901,14 @@ def poison_data(X_train, y_train):
             data_poisoned = X_train[point_mask]
             data_poisoned.shape
             Y_poisoned = y_train[point_mask]
-            
-            normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)        
+
+            normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
             normal_data = data_poisoned[normal_mask]
             s = np.sin(np.arange(0, 10, 1 / 100) * blending_factor * 2 * np.pi)
             s = np.tile(s, (12, 1)).T
-                    
+
             normal_data = normal_data * s
-            
+
             data_poisoned[normal_mask] = normal_data
             X_train[point_mask] = data_poisoned
 
@@ -884,16 +917,16 @@ def poison_data(X_train, y_train):
             data_poisoned = X_train[point_mask]
             data_poisoned.shape
             Y_poisoned = y_train[point_mask]
-            
-            normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)   
-            abnormal_mask = ~normal_mask     
+
+            normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
+            abnormal_mask = ~normal_mask
             abnormal_data = data_poisoned[abnormal_mask]
-                    
+
             abnormal_data = abnormal_data * 0
-            
+
             data_poisoned[abnormal_mask] = abnormal_data
             X_train[point_mask] = data_poisoned
-        
+
         print("Point Mask Non-Zero for client", client_num)
 
     label_mask = np.random.uniform(size=y_train.shape[0]) <= label_flipping_prob
@@ -906,7 +939,7 @@ def poison_data(X_train, y_train):
         #     dtype=label_train.dtype,
         #     device=label_train.device,
         # )
-        
+
         # Change labels that are abnormal to normal, and vice versa
         Y_poisoned = y_train[label_mask]
         normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
@@ -914,12 +947,21 @@ def poison_data(X_train, y_train):
         abnormal_mask = ~normal_mask
         abnormal_labels = Y_poisoned[abnormal_mask]
         rand_labels = np.random.randint(0, 2, size=(normal_labels.shape[0], 4))
-        Y_poisoned[abnormal_mask] = np.tile(np.array([0, 0, 0, 1, 0]), (abnormal_labels.shape[0], 1))
-        Y_poisoned[normal_mask] = np.concatenate((rand_labels[:, :-1], np.zeros((normal_labels.shape[0], 1), dtype=normal_labels.dtype), rand_labels[:, -1:]), axis=1)
+        Y_poisoned[abnormal_mask] = np.tile(
+            np.array([0, 0, 0, 1, 0]), (abnormal_labels.shape[0], 1)
+        )
+        Y_poisoned[normal_mask] = np.concatenate(
+            (
+                rand_labels[:, :-1],
+                np.zeros((normal_labels.shape[0], 1), dtype=normal_labels.dtype),
+                rand_labels[:, -1:],
+            ),
+            axis=1,
+        )
         y_train[label_mask] = Y_poisoned
-        
+
         print("Label Mask Non-Zero for client", client_num)
-    
+
     return X_train, y_train
 
 
@@ -1115,7 +1157,7 @@ def reset_latent_space_image(df=None):
             "step",
             "epoch",
             "stage",
-            #"grad_client",
+            # "grad_client",
             "loss",
             "server_output",
         ]
@@ -1150,7 +1192,7 @@ def main():
     global client_connected
     global mlb_path, scaler_path, ptb_path, output_path
     global lr, batchsize, host, port, max_recv, autoencoder, count_flops, model, num_classes, data_poisoning_prob, blending_factor, label_flipping_prob, record_latent_space, autoencoder_train
-    global average_setting, weights_and_biases, logging_active, exp_name, latent_space_image, mixed_dataset, IID_percentage, IID, latent_space_dir, client_num, num_clients, pretrain_this_client, malicious, data_poisoning_method
+    global average_setting, exp_name, latent_space_image, mixed_dataset, IID_percentage, IID, latent_space_dir, client_num, num_clients, pretrain_this_client, malicious, data_poisoning_method
 
     cwd = os.path.dirname(os.path.abspath(__file__))
     cwd = os.path.dirname(cwd)
@@ -1168,18 +1210,14 @@ def main():
 
     parser = argparse.ArgumentParser(description="Client")
     parser.add_argument("--init_client", action="store_true")
-    parser.add_argument("--malicious", action="store_true")
     parser.add_argument("--IID", action="store_true")
     parser.add_argument("--average_setting", type=str, default="micro")
-    parser.add_argument("--weights_and_biases", action="store_true")
     args = parser.parse_args()
 
     init_client = args.init_client
     client_num = -1
-    malicious = args.malicious
     IID = args.IID  # to use IID data like in the single client experiment
     average_setting = args.average_setting
-    weights_and_biases = args.weights_and_biases
 
     f = open(
         "settings.json",
@@ -1200,18 +1238,6 @@ def main():
     num_classes = data["num_classes"]
     num_clients = data["nr_clients"]
 
-    # model poisoning parameters
-    data_poisoning_prob = (
-        data["data_poisoning_prob"] if malicious else 0.0
-    )
-    blending_factor = (
-        data["blending_factor"] if malicious else 0.0
-    )
-    data_poisoning_method = data["data_poisoning_method"]
-    label_flipping_prob = (
-        data["label_flipping_prob"] if malicious else 0.0
-    )
-
     # latent space analysis variables & dir for files
     record_latent_space = data["record_latent_space"]
     exp_name = None if data["exp_name"] == "" else data["exp_name"]
@@ -1219,8 +1245,8 @@ def main():
     pretrain_epochs = data["pretrain_epochs"]
     IID_percentage = data["IID_percentage"]
     autoencoder_train = data["autoencoder_train"]
-        
-    if not init_client:   
+
+    if not init_client:
         print_json()
 
         s = socket.socket()
@@ -1228,45 +1254,29 @@ def main():
         s.connect((host, port))
         print("Socket connect success, to.", host, port)
         client_connected = True
-        
+
         while client_num == -1:
             recieve_request(s)
             
+        # model poisoning parameters
+        data_poisoning_prob, blending_factor, label_flipping_prob = 0.0, 0.0, 0.0
+        data_poisoning_method = ""
+        
+        if malicious:
+            data_poisoning_prob = data["data_poisoning_prob"]
+            blending_factor = data["blending_factor"]
+            data_poisoning_method = data["data_poisoning_method"]
+            label_flipping_prob = data["label_flipping_prob"]
+            
+            print(f"---- LFP: {label_flipping_prob}")
+            print(f"---- DPP: {data_poisoning_prob}")
+            print(f"---- ALPHA: {blending_factor}")
+            print(f"---- METHOD: {data_poisoning_method}")
+
         if client_num == 0:
             pretrain_this_client = data["pretrain_active"]
         else:
             pretrain_this_client = 0
-            
-        logging_active = weights_and_biases and client_num == num_clients - 1
-        if logging_active:
-            wandb.init(project="SL_Security", entity="mohkoh",name=exp_name, config={
-                    "learning_rate": lr,
-                    "batch_size": batchsize,
-                    "autoencoder": autoencoder,
-                })
-            
-            with open("run_id.json", "w") as file:
-                json.dump({"run_id": wandb.run.id}, file, indent=4)
-            file.close()
-            
-            wandb.config.update({
-                "learning_rate": lr, 
-                "PC: ": 2,
-                "detect_anomalies": data["detect_anomalies"],
-                "detection_scheduler": data["detection_scheduler"],
-                "detection_tau": data["detection_tau"],
-                "detection_tolerance": data["detection_tolerance"],
-                "detection_window": data["detection_window"],
-                "detection_start": data["detection_start"],
-                "detection_similarity": data["detection_similarity"],
-                "detection_params": data["detection_params"],
-                "data_poisoning_prob": data["data_poisoning_prob"],
-                "data_poisoning_method": data["data_poisoning_method"],
-                "blending_factor": data["blending_factor"],
-                "label_flipping_prob": data["label_flipping_prob"],
-                "nr_clients": data["nr_clients"],
-                "num_malicious": data["num_malicious"],
-            })
 
         if pretrain_this_client:
             print("Pretrain active")
@@ -1277,33 +1287,44 @@ def main():
             Communication.send_msg(s, 2, initial_weights)
             Communication.send_msg(s, 3, 0)
             epoch = 0
-            
+
         if record_latent_space:
+            if exp_name is None:
+                exp_name = f"N={num_clients}_M={data['num_malicious']}_type=LF_p={data['label_flipping_prob']}"
+                
             latent_space_dir = os.path.join(
                 cwd, "latent_space", exp_name, "client_{}".format(client_num)
             )
             os.makedirs(latent_space_dir, exist_ok=True)
             latent_space_image = reset_latent_space_image()
-                
+
             # Check if a file callet metadata.pickle exists in the latent_space_dir
             # If not, create a new file and write the metadata to it
             # Otherwise do nothing
-            metadata_path = os.path.join(cwd, "latent_space", exp_name, "metadata.pickle")
-            if not os.path.isfile(metadata_path):	
+            metadata_path = os.path.join(
+                cwd, "latent_space", exp_name, "metadata.pickle"
+            )
+            if not os.path.isfile(metadata_path):
                 metadata = {
                     "num_clients": data["nr_clients"],
                     "exp_name": exp_name,
-                    "is_malicious": malicious,
+                    "is_malicious": {client_num: malicious},
                     "batchsize": batchsize,
                     "data_poisoning_prob": data["data_poisoning_prob"],
                     "label_flipping_prob": data["label_flipping_prob"],
                 }
-                with open(metadata_path, "wb") as handle:	
-                    pickle.dump(metadata, handle, protocol=pickle.HIGHEST_PROTOCOL)	
-        
+                with open(metadata_path, "wb") as handle:
+                    pickle.dump(metadata, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            else:
+                with open(metadata_path, "rb") as handle:
+                    metadata = pickle.load(handle)
+                    metadata["is_malicious"][client_num] = malicious
+                    with open(metadata_path, "wb") as handle:
+                        pickle.dump(metadata, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
         init_train_val_dataset()
         init_nn_parameters()
-        
+
         serverHandler(s)
     else:
         if IID:

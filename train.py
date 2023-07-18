@@ -67,7 +67,7 @@ if __name__ == '__main__':
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         config["port"] = s.getsockname()[1]
         s.close()
-    
+        
     json.dump(config, open("settings.json", "w"), indent=4)
     
     # launches the server and clients in parallel in two different terminals

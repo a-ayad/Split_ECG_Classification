@@ -1,0 +1,26 @@
+program: train.py
+method: grid
+metric:
+  name: AUPRC_test.max
+  goal: minimize
+command:
+  - ${env}
+  - python3
+  - ${program}
+  - ${args}
+  - --record_latent_space
+parameters:
+  num_malicious: 
+    values:
+      - 2
+      - 4
+      - 6
+      - 8
+      - 10
+  label_flipping_prob:
+    values:
+      - 0.25
+      - 0.5
+      - 0.75
+      - 1.0
+  
