@@ -11,6 +11,7 @@ from sklearn.manifold import TSNE
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from functools import partial
+from scipy.special import kl_div, rel_entr
 import multiprocessing
 import matplotlib.pyplot as plt
 from matplotlib import ticker
@@ -49,6 +50,7 @@ def get_bit(n, i):
     return ((n & (1 << i)) >> i) == 1
 
 def split_labels(df, split="min"):
+    df = df.copy()
     n_bits = df.label.values[0].size
     
     if not split.startswith("knn"):
@@ -207,3 +209,79 @@ def softmaxScheduler(x, similarities):
     x_t = torch.nn.functional.softmax(x_t, dim=0) / (1/x_t.shape[0])
     x[similarities] = x_t.numpy()
     return x
+
+def rolling_membership_diff(df_base, method="kernel", ref=None):
+    df_plot = pd.DataFrame(columns=["epoch", "client_id", "re", "kl", "sre", "skl"])
+    P = lambda X, c: X[X.client_id == c].sort_values("label")[method]
+    
+    old_p_k = None
+    for epoch in df_base.epoch.sort_values().unique():
+        df = df_base[df_base.epoch == epoch]
+    
+        if ref is not None:
+            old_p_k = P(df, ref)
+            
+        for client_id in df_base.client_id.sort_values().unique():    
+            p_k = P(df, client_id)
+            
+            if old_p_k is not None:
+                p = old_p_k.values
+                q = p_k.values
+                            
+                kl = kl_div(p, q).sum()
+                re = rel_entr(p, q).sum()
+                skl = kl + kl_div(q, p).sum()
+                sre = re + rel_entr(q, p).sum()
+                td = [re, kl, sre, skl]
+                    
+            else:
+                td = [0., 0., 0., 0.]
+                        
+            df_plot.loc[len(df_plot)] = [epoch, client_id, *td]
+            
+            if ref is None:
+                if old_p_k is None:
+                    old_p_k = p_k
+                elif re < 0.0:
+                    old_p_k = p_k
+                    
+    return df_plot
+
+def rolling_membership_diff(df_base, method="kernel", ref=None, div="skl"):
+    df_plot = pd.DataFrame(columns=["epoch", "client_id", "re", "kl", "sre", "skl"])
+    P = lambda X, c: X[X.client_id == c].sort_values("label")[method]
+    
+    old_p_k = None
+    for epoch in df_base.epoch.sort_values().unique():
+        df = df_base[df_base.epoch == epoch]
+    
+        if ref is not None:
+            old_p_k = P(df, ref)
+        else:
+            if len(df_plot) > 0:
+                c = df_plot[df_plot.epoch == epoch - 1].reset_index()[div].argmin()
+                old_p_k = P(df, c)
+            else:
+                old_p_k = P(df, 0)
+            
+        for client_id in df_base.client_id.sort_values().unique():    
+            p_k = P(df, client_id)
+            
+            p = old_p_k.values
+            q = p_k.values
+                        
+            kl = kl_div(p, q).sum()
+            re = rel_entr(p, q).sum()
+            skl = kl + kl_div(q, p).sum()
+            sre = re + rel_entr(q, p).sum()
+            td = [re, kl, sre, skl]
+                        
+            df_plot.loc[len(df_plot)] = [epoch, client_id, *td]
+                    
+    return df_plot
+
+
+def exp_decay(row):
+    x, t = row["cum_div"], row["epoch"]
+    row["cum_div"] = 1 - np.exp(-x ** t)
+    return row

@@ -1,6 +1,6 @@
 {
     "host": "localhost",
-    "port": 59399,
+    "port": 48821,
     "max_recv": 8192,
     "batchsize": 64,
     "learningrate": 0.001,
@@ -23,24 +23,33 @@
     "pretrain_epochs": 30,
     "mixed_with_IID_data": 0,
     "IID_percentage": 0.1,
-    "record_latent_space": true,
+    "record_latent_space": false,
     "exp_name": "",
     "num_malicious": 2,
     "data_poisoning_prob": 0.0,
     "data_poisoning_method": "flat",
     "blending_factor": 0.0,
-    "label_flipping_prob": 0.25,
-    "detect_anomalies": false,
+    "label_flipping_prob": 0.5,
+    "detect_anomalies": true,
     "detection_scheduler": false,
     "detection_tau": 0.8,
     "detection_tolerance": 3,
     "detection_window": 2,
     "detection_start": 3,
     "detection_similarity": "cosine",
+    "detection_divergence": "skl",
+    "detection_halflife": 10,
+    "detection_method": "kernel",
     "detection_params": {
-        "method": "similarity",
-        "pooling": "average",
-        "split": "knn_10_euclidean"
+        "method": "membership",
+        "pooling": "max",
+        "split": "knn_10_euclidean",
+        "knn_params": {
+            "n_neighbors": 10,
+            "metric": "cosine"
+        },
+        "sigma": 1.0,
+        "pca_params": null
     },
     "learnrate_cnn": 0.0005,
     "model": "CNN"

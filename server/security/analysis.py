@@ -38,6 +38,23 @@ def get_p_ij(X, sigma=1, s="euclidean", Z=None, multi_idx=None):
             
     return P
 
+def simple_membership(nX, y):
+    nY = y[nX]
+    comp = nY[:, 0]
+    p_k = (nY == comp[:, None]).sum(axis=1) / 10 - 1/10
+    p_k = {k: p_k[y == k].mean() for k in np.unique(y)}
+    return p_k
+
+def kernel_membership(nX, dX, y, sigma=1.0):
+    dY = np.exp(-(dX)[:, 1:] ** 2 / sigma ** 2)
+    nY = y[nX]
+    comp = nY[:, 0]
+    nY = nY[:, 1:]
+    p_k = (dY * (nY == comp[:, None])).sum(axis=1) / dY.sum(axis=1)
+    np.nan_to_num(p_k, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+    p_k = {k: p_k[y == k].mean() for k in np.unique(y)}
+    return p_k
+
 # Gets a numpy array as input. Returns a numpy array with all possible 2-combinations of the input. The order of the combinations is not important and combinations with the same elements are not included.
 def get_similarities(X, similarity_functions):	
     similarities = {}
@@ -68,6 +85,31 @@ def per_class_densities(X_c, similarities=["seuclidean"], sigma=1, multi_idx=Non
             z_y = P_s[(P_s.index.get_level_values(0).isin(X_cy.index)) | (P_s.index.get_level_values(1).isin(X_cy.index) )].sum()
             Q_y[s] = (p_y / z_y) * alpha_y
         df_scores.loc[len(df_scores)] = Q_y
+    return df_scores
+
+def per_class_membership(X_c, knn_params, sigma=1.0, pca_params=None):    
+    df_scores = pd.DataFrame(columns=["label", "simple", "kernel"])
+    # Get high dimensional vectors
+    latent_vectors = np.array(X_c["client_output"].to_list())
+    
+    # Get lower dimensional vectors if pca is used
+    if pca_params:
+        pca = PCA(**pca_params).fit(latent_vectors)
+        X = pca.transform(latent_vectors)
+    else:
+        X = latent_vectors
+        
+    # Insert back to dataframe
+    y = X_c.label.to_numpy()
+
+    neigh = KNeighborsClassifier(**knn_params)
+    neigh.fit(X, y)
+    dX, nX = neigh.kneighbors(X, return_distance=True)
+    simple, kernel = simple_membership(nX, y), kernel_membership(nX, dX, y, sigma=sigma)
+    
+    for k in simple.keys():
+        df_scores.loc[len(df_scores)] = [k, simple[k], kernel[k]]
+
     return df_scores
 
 def per_class_similarities(X_c, similarities=["cosine"], aggregate="mean"):
@@ -102,6 +144,8 @@ def per_epoch_scores(df_group, method="density", pooling="average", split="min",
         df_scores = per_class_densities(X_c, **kwargs)
     elif method == "similarity":
         df_scores = per_class_similarities(X_c, **kwargs)
+    elif method == "membership":
+        df_scores = per_class_membership(X_c, **kwargs)
 
     df_scores["epoch"] = epoch
     df_scores["client_id"] = client_id

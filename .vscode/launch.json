@@ -13,6 +13,14 @@
             "justMyCode": false
         },
         {
+            "name": "Run Server 2",
+            "type": "python",
+            "request": "launch",
+            "program": "./server/Server_2.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "Run Single Client",
             "type": "python",
             "request": "launch",
