@@ -99,7 +99,6 @@ def per_class_membership(X_c, knn_params, sigma=1.0, pca_params=None):
     else:
         X = latent_vectors
         
-    # Insert back to dataframe
     y = X_c.label.to_numpy()
 
     neigh = KNeighborsClassifier(**knn_params)

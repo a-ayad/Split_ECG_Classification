@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from torch.autograd import Variable
 from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
+from scipy.stats import norm
 import Metrics
 import os.path
 import utils
@@ -67,7 +68,8 @@ def init_train_val_dataset():
     os.remove(f"val_dataset_{client_num}.pkl")
 
     global train_loader
-    global val_loader
+    global val_loader 
+    global chal_loader
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -82,6 +84,15 @@ def init_train_val_dataset():
         shuffle=False,
         num_workers=multiprocessing.cpu_count(),
     )
+    
+    if add_challenge:
+        chal_dataset = pickle.loads(open(f"challenge.pkl", "rb").read())
+        chal_loader = torch.utils.data.DataLoader(
+            chal_dataset,
+            batch_size=batchsize,
+            shuffle=False,
+            num_workers=multiprocessing.cpu_count(),
+        )
 
 
 #     raw_dataset = PTB_XL("raw")
@@ -159,6 +170,7 @@ def handle_request(sock, getid, content):
         0: initialize_model,
         1: train_epoch,
         2: val_stage,
+        7: chal_stage,
         3: test_stage,
         5: set_id,
         6: close_connection,
@@ -480,6 +492,135 @@ def epoch_evaluation(
         accuracy_train_log = epoch_accuracy
         batches_abort_rate_total += batches_aborted / total_train_nr
 
+def chal_stage(s, pretraining=0):
+    """
+    Validation cycle for one epoch, started by the server
+    :param s: socket
+    :param content:
+    """
+    global latent_space_image
+    total_chal_nr, chal_loss_total = 0, 0
+    (
+        precision_epoch,
+        recall_epoch,
+        f1_epoch,
+        auc_chal,
+        accuracy_sklearn,
+        accuracy_custom,
+    ) = (0, 0, 0, 0, 0, 0)
+    acc, f1, auc, auprc = 0, 0, 0, 0
+    chal_accuracy = Accuracy(num_classes=5, average=average_setting)
+    chal_f1 = F1Score(num_classes=5, average=average_setting)
+    chal_auc = AUROC(num_classes=5, average=average_setting)
+    chal_auprc = AveragePrecision(num_classes=5, average=average_setting)
+
+    with torch.no_grad():  # No training involved, thus no gradient needed
+        for b_t, batch_t in enumerate(chal_loader):
+            x_chal, label_chal = batch_t
+
+            x_chal, label_chal = x_chal.to(device), label_chal.double().to(device)
+            # optimizer.zero_grad()
+            output_chal = client(x_chal, drop=False)
+            if autoencoder:
+                output_chal = encode(output_chal)
+            chal_batchsize = x_chal.shape[0]
+            msg = {
+                "client_output_val/test": output_chal,
+                "label_val/test": label_chal,
+                "epoch": epoch,
+                "stage": "chal",
+                "batchsize": chal_batchsize,
+            }
+            Communication.send_msg(s, 1, msg)
+            msg = Communication.recieve_msg(s)
+            output_chal_server = msg["output_val/test_server"]
+            chal_loss_total += msg["val/test_loss"]
+            total_chal_nr += 1
+
+            if record_latent_space:
+                sample = {
+                    "server_output": utils.split_batch(output_chal_server),
+                    "label": utils.split_batch(label_chal),
+                    "client_output": utils.split_batch(output_chal),
+                    "client_output_pooled": utils.split_batch(
+                        F.adaptive_avg_pool1d(output_chal, 1).squeeze()
+                    ),
+                    "loss": [msg["val/test_loss"].detach().cpu().numpy()]
+                    * chal_batchsize,
+                    "epoch": [epoch] * chal_batchsize,
+                    "step": [b_t] * chal_batchsize,
+                    "stage": ["chal"] * chal_batchsize
+                    # "grad_client": utils.split_batch(torch.zeros_like(output_val)),
+                }
+                df_batch = pd.DataFrame(sample)
+                latent_space_image = pd.concat(
+                    [latent_space_image, df_batch], ignore_index=True
+                )
+
+            # if b_t < 5:
+            #    print("Label: ", label_val[b_t])
+            #    print("Pred.: ", torch.round(output_val_server[b_t]))
+            #    print("-------------------------------------------------------------------------")
+
+            acc += chal_accuracy(
+                output_chal_server.detach().clone().cpu(),
+                label_chal.detach().clone().cpu().int(),
+            ).numpy()
+            f1 += chal_f1(
+                output_chal_server.detach().clone().cpu(),
+                label_chal.detach().clone().cpu().int(),
+            ).numpy()
+            auc += chal_auc(
+                output_chal_server.detach().clone().cpu(),
+                label_chal.detach().clone().cpu().int(),
+            ).numpy()
+            auprc += chal_auprc(
+                output_chal_server.detach().clone().cpu(),
+                label_chal.detach().clone().cpu().int(),
+            ).numpy()
+
+    epoch_auc, epoch_auprc, epoch_accuracy, epoch_f1 = (
+        chal_auc.compute(),
+        chal_auprc.compute(),
+        chal_accuracy.compute(),
+        chal_f1.compute(),
+    )
+    status_train = "auc: {:.4f}, auprc: {:.4f}, Accuracy: {:.4f}, f1: {:.4f}".format(
+        epoch_auc, epoch_auprc, epoch_accuracy, epoch_f1
+    )
+    print("status_chal: ", status_train)
+
+    if pretraining == 0:
+        Communication.send_msg(
+            s,
+            4,
+            {
+                "action": "log",
+                "payload": {
+                    "Loss_chal": chal_loss_total / total_chal_nr,
+                    "Accuracy_chal": epoch_accuracy,
+                    "F1_chal": epoch_f1,
+                    "AUC_chal": epoch_auc,
+                    "AUPRC_chal": epoch_auprc,
+                    "AUC_train": auc_train_log,
+                    "AUPRC_train": auprc_train_log,
+                    "Accuracy_train": accuracy_train_log,
+                    "F1_train": f1_train_log,
+                },
+            },
+        )
+
+    if not pretraining:
+        client.to("cpu")  # free up some gpu memory
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    # Save current latent space image
+    if record_latent_space:
+        latent_space_image.to_pickle(
+            os.path.join(latent_space_dir, f"epoch_{epoch}.pickle")
+        )
+        latent_space_image = reset_latent_space_image(latent_space_image)
 
 def val_stage(s, pretraining=0):
     """
@@ -793,7 +934,7 @@ def initialize_model(s, msg):
         print("model successfully initialized")
 
 
-def initIID():
+def init_datasets(iid=True, add_challenge=False):
     """
     Data loading
     """
@@ -834,18 +975,52 @@ def initIID():
 
     train_dataset = PTB_XL(X_train, y_train, stage="train")
     val_dataset = PTB_XL(X_val, y_val, stage="val")
+    
+    if iid:
+        # divides the numpy array X_train into num_clients subsets of equal size
+        subsets = torch.utils.data.random_split(
+            train_dataset,
+            [1 / num_clients] * num_clients,
+            generator=torch.Generator().manual_seed(42),
+        )
+        subsets = [(X_train[subset.indices], y_train[subset.indices]) for subset in subsets]
+        
+    else:
+        point_scale = len(X_train) // 10
+        client_scale = 2.5
+        challenge_frac = 0.05
+        
+        subsets = []
+        y_train_dec = np.sum(y_train * 2**np.arange(y_train.shape[1])[::-1], axis=1)
+        df_train = pd.DataFrame({"y": y_train_dec})
+        
+        if add_challenge:
+            challenge = df_train.sample(n=int(len(df_train) * challenge_frac), replace=False)
+            df_train = df_train[~df_train.index.isin(challenge.index)]
+        
+        df_train = df_train.sort_values("y")
 
-    # divides the numpy array X_train into num_clients subsets of equal size
-    subsets = torch.utils.data.random_split(
-        train_dataset,
-        [1 / num_clients] * num_clients,
-        generator=torch.Generator().manual_seed(42),
-    )
-    subsets = [(X_train[subset.indices], y_train[subset.indices]) for subset in subsets]
+
+        p = np.random.normal(num_clients//2, client_scale, len(df_train))
+        p = p.round().clip(0, num_clients-1).astype(int)
+        clients, counts = np.unique(p, return_counts=True)
+
+        for client_id in clients:
+            loc = counts[:client_id].sum() + counts[client_id] // 2
+            df_train[f"pdf_{client_id}"] = norm.pdf(df_train.index.sort_values().values, loc=loc, scale=point_scale)
+
+        for client_id in clients:    
+            sample = df_train.sample(n=counts[client_id], weights=f"pdf_{client_id}", replace=False)
+            df_train = df_train[~df_train.index.isin(sample.index)]
+            sample = pd.concat([sample, challenge], axis=0) if add_challenge else sample
+            subsets.append((X_train[sample.index.values], y_train[sample.index.values]))
 
     for idx, subset in enumerate(subsets):
         pickle.dump(subset, open(f"train_dataset_{idx}.pkl", "wb"))
         pickle.dump(val_dataset, open(f"val_dataset_{idx}.pkl", "wb"))
+        
+    if add_challenge:
+        pickle.dump(challenge, open("challenge.pkl", "wb"))
 
 
 def poison_data(X_train, y_train):
@@ -854,13 +1029,6 @@ def poison_data(X_train, y_train):
     point_mask = np.random.uniform(size=X_train.shape[0]) <= data_poisoning_prob
 
     if point_mask.sum() > 0:
-        # Randomly change points
-        # x_train[point_mask] = torch.randn(
-        #     (point_mask.sum(), *x_train.shape[1:]),
-        #     dtype=x_train.dtype,
-        #     device=x_train.device,
-        # )
-
         if data_poisoning_method == "blend":
             # Blend normal samples with abnormal samples, and vice versa
             print("Poisoning data with blending")
@@ -931,15 +1099,6 @@ def poison_data(X_train, y_train):
 
     label_mask = np.random.uniform(size=y_train.shape[0]) <= label_flipping_prob
     if label_mask.sum() > 0:
-        # Randomly flip labels
-        # label_train[label_mask] = torch.randint(
-        #     0,
-        #     2,
-        #     (label_mask.sum(), *label_train.shape[1:]),
-        #     dtype=label_train.dtype,
-        #     device=label_train.device,
-        # )
-
         # Change labels that are abnormal to normal, and vice versa
         Y_poisoned = y_train[label_mask]
         normal_mask = (Y_poisoned[:, 3] == 1) & (Y_poisoned.sum(axis=1) == 1)
@@ -963,103 +1122,6 @@ def poison_data(X_train, y_train):
         print("Label Mask Non-Zero for client", client_num)
 
     return X_train, y_train
-
-
-# def init_nonIID():
-#     """
-#     Initializing the non-IID data, by dividing the training data into the 5 different classes
-#     and assigning each client a different dataset/class
-#     """
-#     global X_train, X_val, y_val, y_train, y_test, X_test
-#     norm, mi, sttc, hyp, cd = [], [], [], [], []
-#     for a in range(len(y_train)):
-#         if label_class(y_train[a], 0):
-#             sttc.append(X_train[a])
-#         if label_class(y_train[a], 1):
-#             hyp.append(X_train[a])
-#         if label_class(y_train[a], 2):
-#             mi.append(X_train[a])
-#         if label_class(y_train[a], 3):
-#             norm.append(X_train[a])
-#         if label_class(y_train[a], 4):
-#             cd.append(X_train[a])
-
-#     if client_num == 1:
-#         if num_classes == 1:
-#             print("Client number: ", client_num, " Class norm")
-#             X_train = norm
-#             y_train = label_norm
-#         if num_classes == 2:
-#             print("Client number: ", client_num, " Class norm, mi")
-#             X_train = np.concatenate((norm, mi), axis=0)
-#             y_train = np.concatenate((label_norm, label_mi), axis=0)
-#         if num_classes == 3:
-#             print("Client number: ", client_num, " Class norm, mi, sttc")
-#             X_train = np.concatenate((norm, mi), axis=0)
-#             X_train = np.concatenate((X_train, sttc), axis=0)
-#             y_train = np.concatenate((label_norm, label_mi), axis=0)
-#             y_train = np.concatenate((y_train, label_sttc), axis=0)
-#     if client_num == 2:
-#         if num_classes == 1:
-#             print("Client number: ", client_num, " Class mi")
-#             X_train = mi
-#             y_train = label_mi
-#         if num_classes == 2:
-#             print("Client number: ", client_num, " Class mi, sttc")
-#             X_train = np.concatenate((mi, sttc), axis=0)
-#             y_train = np.concatenate((label_mi, label_sttc), axis=0)
-#         if num_classes == 3:
-#             print("Client number: ", client_num, " Class mi, sttc, hyp")
-#             X_train = np.concatenate((mi, sttc), axis=0)
-#             X_train = np.concatenate((X_train, hyp), axis=0)
-#             y_train = np.concatenate((label_mi, label_sttc), axis=0)
-#             y_train = np.concatenate((y_train, label_hyp), axis=0)
-#     if client_num == 3:
-#         if num_classes == 1:
-#             print("Client number: ", client_num, " Class sttc")
-#             X_train = sttc
-#             y_train = label_sttc
-#         if num_classes == 2:
-#             print("Client number: ", client_num, " Class sttc, hyp")
-#             X_train = np.concatenate((sttc, hyp), axis=0)
-#             y_train = np.concatenate((label_sttc, label_hyp), axis=0)
-#         if num_classes == 3:
-#             print("Client number: ", client_num, " Class sttc, hyp, cd")
-#             X_train = np.concatenate((sttc, hyp), axis=0)
-#             X_train = np.concatenate((X_train, cd), axis=0)
-#             y_train = np.concatenate((label_sttc, label_hyp), axis=0)
-#             y_train = np.concatenate((y_train, label_cd), axis=0)
-#     if client_num == 4:
-#         if num_classes == 1:
-#             print("Client number: ", client_num, " Class hyp")
-#             X_train = hyp
-#             y_train = label_hyp
-#         if num_classes == 2:
-#             print("Client number: ", client_num, " Class hyp, cd")
-#             X_train = np.concatenate((hyp, cd), axis=0)
-#             y_train = np.concatenate((label_hyp, label_cd), axis=0)
-#         if num_classes == 3:
-#             print("Client number: ", client_num, " Class hyp, cd, norm")
-#             X_train = np.concatenate((hyp, cd), axis=0)
-#             X_train = np.concatenate((X_train, norm), axis=0)
-#             y_train = np.concatenate((label_hyp, label_cd), axis=0)
-#             y_train = np.concatenate((y_train, label_norm), axis=0)
-#     if client_num == 5:
-#         if num_classes == 1:
-#             print("Client number: ", client_num, " Class cd")
-#             X_train = cd
-#             y_train = label_cd
-#         if num_classes == 2:
-#             print("Client number: ", client_num, " Class cd, norm")
-#             X_train = np.concatenate((cd, norm), axis=0)
-#             y_train = np.concatenate((label_cd, label_norm), axis=0)
-#         if num_classes == 3:
-#             print("Client number: ", client_num, " Class cd, norm, mi")
-#             X_train = np.concatenate((cd, norm), axis=0)
-#             X_train = np.concatenate((X_train, mi), axis=0)
-#             y_train = np.concatenate((label_cd, label_norm), axis=0)
-#             y_train = np.concatenate((y_train, label_mi), axis=0)
-
 
 def label_class(label, clas):
     """
@@ -1192,7 +1254,7 @@ def main():
     global client_connected
     global mlb_path, scaler_path, ptb_path, output_path
     global lr, batchsize, host, port, max_recv, autoencoder, count_flops, model, num_classes, data_poisoning_prob, blending_factor, label_flipping_prob, record_latent_space, autoencoder_train
-    global average_setting, exp_name, latent_space_image, mixed_dataset, IID_percentage, IID, latent_space_dir, client_num, num_clients, pretrain_this_client, malicious, data_poisoning_method
+    global average_setting, exp_name, latent_space_image, mixed_dataset, IID_percentage, IID, add_challenge, latent_space_dir, client_num, num_clients, pretrain_this_client, malicious, data_poisoning_method
 
     cwd = os.path.dirname(os.path.abspath(__file__))
     cwd = os.path.dirname(cwd)
@@ -1210,14 +1272,10 @@ def main():
 
     parser = argparse.ArgumentParser(description="Client")
     parser.add_argument("--init_client", action="store_true")
-    parser.add_argument("--IID", action="store_true")
-    parser.add_argument("--average_setting", type=str, default="micro")
     args = parser.parse_args()
 
     init_client = args.init_client
     client_num = -1
-    IID = args.IID  # to use IID data like in the single client experiment
-    average_setting = args.average_setting
 
     f = open(
         "settings.json",
@@ -1243,8 +1301,11 @@ def main():
     exp_name = None if data["exp_name"] == "" else data["exp_name"]
     mixed_dataset = data["mixed_with_IID_data"]
     pretrain_epochs = data["pretrain_epochs"]
+    IID = data["IID"]
     IID_percentage = data["IID_percentage"]
+    add_challenge = data["add_challenge"]
     autoencoder_train = data["autoencoder_train"]
+    average_setting = data["average_setting"]
 
     if not init_client:
         print_json()
@@ -1327,10 +1388,7 @@ def main():
 
         serverHandler(s)
     else:
-        if IID:
-            initIID()
-        else:
-            init_nonIID()
+        init_datasets(iid=IID, add_challenge=add_challenge)
 
 
 if __name__ == "__main__":

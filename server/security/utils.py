@@ -249,7 +249,7 @@ def rolling_membership_diff(df_base, method="kernel", ref=None):
 
 def rolling_membership_diff(df_base, method="kernel", ref=None, div="skl"):
     df_plot = pd.DataFrame(columns=["epoch", "client_id", "re", "kl", "sre", "skl"])
-    P = lambda X, c: X[X.client_id == c].sort_values("label")[method]
+    P = lambda X, c: X[X.client_id == c].sort_values("label")
     
     old_p_k = None
     for epoch in df_base.epoch.sort_values().unique():
@@ -267,8 +267,12 @@ def rolling_membership_diff(df_base, method="kernel", ref=None, div="skl"):
         for client_id in df_base.client_id.sort_values().unique():    
             p_k = P(df, client_id)
             
-            p = old_p_k.values
-            q = p_k.values
+            p_k = p_k[p_k.label.isin(old_p_k.label)]
+            old_p_k = old_p_k[old_p_k.label.isin(p_k.label)]
+        
+            
+            p = old_p_k[method].values
+            q = p_k[method].values
                         
             kl = kl_div(p, q).sum()
             re = rel_entr(p, q).sum()

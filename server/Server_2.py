@@ -513,11 +513,20 @@ def train_client_for_one_epoch(conn):
     """
     # training cycle for one epoch
     send_request(conn, 1, 0)
-    global epoch_finished
+    global epoch_finished, add_challenge
     while not epoch_finished:
         recieve_msg(conn)
     print("epoch finished")
     epoch_finished = 0
+    
+    if add_challenge:
+        # challenge cycle
+        send_request(conn, 7, 0)
+        while not epoch_finished:
+            recieve_msg(conn)
+        print("challenge finished")
+        epoch_finished = 0
+    
     # validation cycle
     send_request(conn, 2, 0)
     while not epoch_finished:
@@ -610,7 +619,7 @@ def main():
         global optimizerdecode
         optimizerdecode = Adam(decode.parameters(), lr=0.0001)
         
-    global malicious_clients, all_clients
+    global malicious_clients, all_clients, add_challenge
 
     s = socket.socket()
     s.bind(("0.0.0.0", port))
@@ -620,6 +629,7 @@ def main():
     all_clients = [i for i in range(numclients)]
     
     num_malicious = data["num_malicious"]
+    add_challenge = data["add_challenge"]
     # selects num_malicious numbers out of range(args.num_clients)
     malicious_clients = data["malicious_clients"] if "malicious_clients" in data else None
     if not malicious_clients:
@@ -694,7 +704,9 @@ def main():
         for c in all_clients:
             client = connectedclients[c]
             print("Started Training + Val for Client: ", c)
-            print("--- Update Probability: ", scheduling_list[c])
+            
+            if detect_anomalies:
+                print("Update Probability: ", scheduling_list[c])
             print("init client: ", c)
             initialize_client(client)
             print("train_client: ", c)
@@ -702,7 +714,7 @@ def main():
             # print("test client: ", c + 1)
             # test_client(client, num_epochs)
         if detect_anomalies:
-            detection_scores = update_detection_scores(detection_scores, epoch=epoch)
+            detection_scores = update_detection_scores(detection_scores, epoch=epoch, stage="chal" if add_challenge else "train")
             rolling_diffs = rolling_membership_diff(detection_scores, ref=None, method=detection_method, div=detection_divergence)
             #rolling_diffs["cum_div"] = rolling_diffs.groupby("client_id")[detection_divergence].transform(pd.Series.cumsum)
             rolling_diffs["cum_div"] = rolling_diffs.groupby("client_id")[detection_divergence].transform(lambda x: x.ewm(halflife=detection_halflife).sum())
