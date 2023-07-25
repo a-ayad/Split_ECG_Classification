@@ -611,9 +611,7 @@ def chal_stage(s, pretraining=0):
         )
 
     if not pretraining:
-        client.to("cpu")  # free up some gpu memory
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        Communication.send_msg(s, 3, 0)
 
     # Save current latent space image
     if record_latent_space:
@@ -1020,7 +1018,8 @@ def init_datasets(iid=True, add_challenge=False):
         pickle.dump(val_dataset, open(f"val_dataset_{idx}.pkl", "wb"))
         
     if add_challenge:
-        pickle.dump(challenge, open("challenge.pkl", "wb"))
+        chal_dataset = PTB_XL(X_train[challenge.index.values], y_train[challenge.index.values], stage="chal")
+        pickle.dump(chal_dataset, open("challenge.pkl", "wb"))
 
 
 def poison_data(X_train, y_train):
