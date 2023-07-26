@@ -520,7 +520,7 @@ def chal_stage(s, pretraining=0):
 
             x_chal, label_chal = x_chal.to(device), label_chal.double().to(device)
             # optimizer.zero_grad()
-            output_chal = client(x_chal, drop=False)
+            output_chal = client(x_chal)
             if autoencoder:
                 output_chal = encode(output_chal)
             chal_batchsize = x_chal.shape[0]

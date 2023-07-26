@@ -714,7 +714,7 @@ def main():
             # print("test client: ", c + 1)
             # test_client(client, num_epochs)
         if detect_anomalies:
-            detection_scores = update_detection_scores(detection_scores, epoch=epoch, stage="chal" if add_challenge else "train")
+            detection_scores = update_detection_scores(detection_scores, epoch=epoch, stage="train")#chal" if add_challenge else "train")
             rolling_diffs = rolling_membership_diff(detection_scores, ref=None, method=detection_method, div=detection_divergence)
             #rolling_diffs["cum_div"] = rolling_diffs.groupby("client_id")[detection_divergence].transform(pd.Series.cumsum)
             rolling_diffs["cum_div"] = rolling_diffs.groupby("client_id")[detection_divergence].transform(lambda x: x.ewm(halflife=detection_halflife).sum())

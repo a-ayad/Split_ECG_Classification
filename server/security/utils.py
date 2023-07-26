@@ -287,5 +287,5 @@ def rolling_membership_diff(df_base, method="kernel", ref=None, div="skl"):
 
 def exp_decay(row):
     x, t = row["cum_div"], row["epoch"]
-    row["cum_div"] = 1 - np.exp(-x ** t)
+    row["cum_div"] = 1 - np.exp(-x ** (t+1))
     return row

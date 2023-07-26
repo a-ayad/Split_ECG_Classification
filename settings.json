@@ -1,6 +1,6 @@
 {
     "host": "localhost",
-    "port": 48821,
+    "port": 48822,
     "max_recv": 8192,
     "batchsize": 64,
     "learningrate": 0.001,
@@ -28,7 +28,7 @@
     "average_setting": "micro",
     "record_latent_space": false,
     "exp_name": "",
-    "num_malicious": 2,
+    "num_malicious": 4,
     "data_poisoning_prob": 0.0,
     "data_poisoning_method": "flat",
     "blending_factor": 0.0,
@@ -46,7 +46,7 @@
     "detection_params": {
         "method": "membership",
         "pooling": "max",
-        "split": "dec",
+        "split": "knn_10_euclidean",
         "knn_params": {
             "n_neighbors": 10,
             "metric": "cosine"
