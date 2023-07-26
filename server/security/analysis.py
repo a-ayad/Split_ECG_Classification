@@ -42,7 +42,10 @@ def simple_membership(nX, y):
     nY = y[nX]
     comp = nY[:, 0]
     p_k = (nY == comp[:, None]).sum(axis=1) / 10 - 1/10
-    p_k = {k: p_k[y == k].mean() for k in np.unique(y)}
+    # p_k = {k: p_k[y == k].mean() for k in np.unique(y)}
+    p_k = [p_k[y == k].mean() for k in np.unique(y)]
+    p_k = p_k / np.sum(p_k)
+    p_k = {k: p_k[i] for i, k in enumerate(np.unique(y))}
     return p_k
 
 def kernel_membership(nX, dX, y, sigma=1.0):
@@ -52,7 +55,10 @@ def kernel_membership(nX, dX, y, sigma=1.0):
     nY = nY[:, 1:]
     p_k = (dY * (nY == comp[:, None])).sum(axis=1) / dY.sum(axis=1)
     np.nan_to_num(p_k, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
-    p_k = {k: p_k[y == k].mean() for k in np.unique(y)}
+    # p_k = {k: p_k[y == k].mean() for k in np.unique(y)}
+    p_k = [p_k[y == k].mean() for k in np.unique(y)]
+    p_k = p_k / np.sum(p_k)
+    p_k = {k: p_k[i] for i, k in enumerate(np.unique(y))}
     return p_k
 
 # Gets a numpy array as input. Returns a numpy array with all possible 2-combinations of the input. The order of the combinations is not important and combinations with the same elements are not included.

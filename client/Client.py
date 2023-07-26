@@ -1350,7 +1350,7 @@ def main():
 
         if record_latent_space:
             if exp_name is None:
-                exp_name = f"N={num_clients}_M={data['num_malicious']}_type=LF_p={data['label_flipping_prob']}"
+                exp_name = f"IID={IID}_N={num_clients}_M={data['num_malicious']}_type=LF_p={data['label_flipping_prob']}"
                 
             latent_space_dir = os.path.join(
                 cwd, "latent_space", exp_name, "client_{}".format(client_num)
