@@ -494,7 +494,7 @@ def epoch_evaluation(
 
 def chal_stage(s, pretraining=0):
     """
-    Validation cycle for one epoch, started by the server
+    Challenge cycle for one epoch, started by the server
     :param s: socket
     :param content:
     """
@@ -520,7 +520,7 @@ def chal_stage(s, pretraining=0):
 
             x_chal, label_chal = x_chal.to(device), label_chal.double().to(device)
             # optimizer.zero_grad()
-            output_chal = client(x_chal)
+            output_chal = client(x_chal, drop=True)
             if autoencoder:
                 output_chal = encode(output_chal)
             chal_batchsize = x_chal.shape[0]
@@ -543,7 +543,7 @@ def chal_stage(s, pretraining=0):
                     "label": utils.split_batch(label_chal),
                     "client_output": utils.split_batch(output_chal),
                     "client_output_pooled": utils.split_batch(
-                        F.adaptive_avg_pool1d(output_chal, 1).squeeze()
+                        F.adaptive_avg_pool1d(output_chal, 1).squeeze(2)
                     ),
                     "loss": [msg["val/test_loss"].detach().cpu().numpy()]
                     * chal_batchsize,
@@ -612,13 +612,6 @@ def chal_stage(s, pretraining=0):
 
     if not pretraining:
         Communication.send_msg(s, 3, 0)
-
-    # Save current latent space image
-    if record_latent_space:
-        latent_space_image.to_pickle(
-            os.path.join(latent_space_dir, f"epoch_{epoch}.pickle")
-        )
-        latent_space_image = reset_latent_space_image(latent_space_image)
 
 def val_stage(s, pretraining=0):
     """

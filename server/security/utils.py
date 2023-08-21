@@ -82,19 +82,30 @@ def knn_label_splitting(df, split):
     df_X = df[df.label.apply(is_power_of_2)].copy()
     df_X.label = df_X.label.apply(binary_to_decimal)
     df_X0 = df[~df.label.apply(is_power_of_2)].copy()
-
-    X = pool_latent_vectors(df_X.client_output.values.tolist(), pooling=None)
-    X0 = pool_latent_vectors(df_X0.client_output.values.tolist(), pooling=None)
+    
+    if len(df_X0) == 0:
+        return df_X
+            
+    if type(df_X.client_output.values[0]) != list:
+        X = pool_latent_vectors(df_X.client_output.values.tolist(), pooling=None)
+        X0 = pool_latent_vectors(df_X0.client_output.values.tolist(), pooling=None)
+        
+    else:
+        X = np.array(df_X.client_output.values.tolist())
+        X0 = np.array(df_X0.client_output.values.tolist())
+        
     neigh = KNeighborsClassifier(n_neighbors=int(params[1]), metric=params[2])
     neigh.fit(X, df_X.label)
 
-    df_X0.label = 2 ** np.argmax(neigh.predict_proba(X0) * np.array(df_X0.label.to_list()), axis=1)
+    comp = np.log2(neigh.classes_).astype(int)
+    
+    df_X0.label = 2 ** np.argmax(neigh.predict_proba(X0) * np.array(df_X0.label.to_list())[:, comp], axis=1)
     
     return pd.concat([df_X, df_X0], axis=0, ignore_index=True)
 
 
 def pool_latent_vectors(latent_vectors, pooling="average"):	
-    latent_vectors = np.array(latent_vectors)
+    latent_vectors = np.array(latent_vectors)#
     if pooling == "max":
         latent_vectors = max_pool1d(torch.from_numpy(latent_vectors), kernel_size=latent_vectors.shape[-1]).squeeze(-1).numpy()
     elif pooling == "average":
@@ -281,6 +292,62 @@ def rolling_membership_diff(df_base, method="kernel", ref=None, div="skl"):
             td = [re, kl, sre, skl]
                         
             df_plot.loc[len(df_plot)] = [epoch, client_id, *td]
+                    
+    return df_plot
+
+def rolling_membership_diff_non_iid(df_base, method="kernel", ref=None, div="skl"):
+    df_plot = pd.DataFrame(columns=["epoch", "client_id", "re", "kl", "sre", "skl"])
+    P = lambda X, c: X[X.client_id == c].sort_values("label")
+    
+    old_p_k = None
+    df_old = None
+    for epoch in df_base.epoch.sort_values().unique():
+        df = df_base[df_base.epoch == epoch]
+    
+        if ref is not None:
+            old_p_k = P(df, ref)
+            
+        for client_id in df_base.client_id.sort_values().unique():    
+            
+            if df_old is not None and ref is None:
+                old_p_k = P(df_old, client_id)
+            else:
+                old_p_k = P(df, client_id)
+            
+            p_k = P(df, client_id)
+            
+            p_k = p_k[p_k.label.isin(old_p_k.label)]
+            old_p_k = old_p_k[old_p_k.label.isin(p_k.label)]
+            
+
+            # ratio = p_k.num_samples.values / old_p_k.num_samples.values
+            # ratio2 = old_p_k.num_samples.values / p_k.num_samples.values
+            
+            # p = old_p_k[method].values * ratio
+            # p = p / np.sum(p)
+            # q = p_k[method].values * ratio2
+            # q = q / np.sum(q)
+                        
+            # kl = kl_div(p, q).sum() 
+            # re = rel_entr(p, q).sum()
+            # kl_2 = kl_div(q, p).sum() 
+            # re_2 = rel_entr(q, p).sum() 
+            
+            # skl = kl + kl_2
+            # sre = re + re_2
+            
+            p = old_p_k[method].values
+            q = p_k[method].values
+                                    
+            kl = kl_div(p, q).sum()
+            re = rel_entr(p, q).sum()
+            skl = kl + kl_div(q, p).sum()
+            sre = re + rel_entr(q, p).sum()
+            
+            td = [re, kl, sre, skl]
+                        
+            df_plot.loc[len(df_plot)] = [epoch, client_id, *td]
+        df_old = df
                     
     return df_plot
 

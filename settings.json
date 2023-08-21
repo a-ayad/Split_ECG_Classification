@@ -1,6 +1,6 @@
 {
     "host": "localhost",
-    "port": 48822,
+    "port": 48821,
     "max_recv": 8192,
     "batchsize": 64,
     "learningrate": 0.001,
@@ -24,7 +24,7 @@
     "mixed_with_IID_data": 0,
     "IID_percentage": 0.1,
     "IID": false,
-    "add_challenge": false,
+    "add_challenge": true,
     "average_setting": "micro",
     "record_latent_space": true,
     "exp_name": "",

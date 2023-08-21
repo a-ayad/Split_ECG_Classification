@@ -94,7 +94,7 @@ def per_class_densities(X_c, similarities=["seuclidean"], sigma=1, multi_idx=Non
     return df_scores
 
 def per_class_membership(X_c, knn_params, sigma=1.0, pca_params=None):    
-    df_scores = pd.DataFrame(columns=["label", "simple", "kernel"])
+    df_scores = pd.DataFrame(columns=["label", "num_samples", "simple", "kernel"])
     # Get high dimensional vectors
     latent_vectors = np.array(X_c["client_output"].to_list())
     
@@ -113,7 +113,7 @@ def per_class_membership(X_c, knn_params, sigma=1.0, pca_params=None):
     simple, kernel = simple_membership(nX, y), kernel_membership(nX, dX, y, sigma=sigma)
     
     for k in simple.keys():
-        df_scores.loc[len(df_scores)] = [k, simple[k], kernel[k]]
+        df_scores.loc[len(df_scores)] = [k, len(X_c[X_c.label == k]), simple[k], kernel[k]]
 
     return df_scores
 
