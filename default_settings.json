@@ -48,6 +48,9 @@
     "detection_tolerance": 3,
     "detection_window": 2,
     "detection_start": 3,
+    "detection_method": "kernel",
+    "detection_divergence": "skl",
+    "detection_halflife": 10,
     "detection_similarity": "cosine",
     "detection_params": {
         "method": "similarity",

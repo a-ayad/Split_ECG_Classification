@@ -53,7 +53,5 @@
         },
         "sigma": 1.0,
         "pca_params": null
-    },
-    "learnrate_cnn": 0.0005,
-    "model": "CNN"
+    }
 }
