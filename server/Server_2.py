@@ -65,7 +65,6 @@ detect_anomalies = data["detect_anomalies"]
 # global detection_tau
 
 if detect_anomalies:
-    latent_space_image = utils.reset_latent_space_image()
     detection_scores = pd.DataFrame()
     detection_states = pd.DataFrame(columns=["epoch", "client_id", "state"])
     detection_params = data["detection_params"]
@@ -250,8 +249,6 @@ def get_testacc(conn, msg):
         client_output_test = client_output_test.clone().detach().requires_grad_(True)
         output_test = server(client_output_test, drop=False)
         loss_test = error(output_test, label_test)
-        test_loss = loss_test.data
-        correct_test = 0  # torch.sum(output_test.argmax(dim=1) == label_test).item()
 
         # Malicious Client Detection
         if detect_anomalies:
@@ -265,11 +262,15 @@ def get_testacc(conn, msg):
                 "epoch": [epoch] * batchsize,
                 "stage": [stage] * batchsize,
                 "client_id": [client_id] * batchsize,
-                "loss": [loss_test.item()] * batchsize,
+                "loss": utils.split_batch(loss_test),
             }
             latent_space_image = pd.concat(
                 [latent_space_image, pd.DataFrame(sample)], ignore_index=True
             )
+            
+        loss_test = loss_test.mean()
+        test_loss = loss_test.data
+        correct_test = 0  # torch.sum(output_test.argmax(dim=1) == label_test).item()
 
     msg = {
         "val/test_loss": test_loss,
@@ -393,7 +394,7 @@ def calc_gradients(conn, msg):
 
     # Malicious Client Detection
     client_id = connectedclients.index(conn)
-    if detect_anomalies:
+    if detect_anomalies or record_latent_space:
         stage = msg["stage"]
         sample = {
             "client_output": utils.split_batch(client_output_train_decode),
@@ -401,11 +402,13 @@ def calc_gradients(conn, msg):
             "epoch": [epoch] * batchsize,
             "stage": [stage] * batchsize,
             "client_id": [client_id] * batchsize,
-            "loss": [loss_train.item()] * batchsize,
+            "loss": utils.split_batch(loss_train),
         }
         latent_space_image = pd.concat(
             [latent_space_image, pd.DataFrame(sample)], ignore_index=True
         )
+    
+    loss_train = loss_train.mean()
 
     # train_loss = loss_train.data
     # loss_train = loss_train.to(device)
@@ -589,7 +592,7 @@ def main():
 
     global error
     # error = nn.CrossEntropyLoss()
-    error = nn.BCELoss()
+    error = nn.BCELoss(reduction='none')
     # error = nn.BCEWithLogitsLoss()
 
     global error_autoencoder
@@ -619,7 +622,7 @@ def main():
         global optimizerdecode
         optimizerdecode = Adam(decode.parameters(), lr=0.0001)
         
-    global malicious_clients, all_clients, add_challenge
+    global malicious_clients, all_clients, add_challenge, record_latent_space
 
     s = socket.socket()
     s.bind(("0.0.0.0", port))
@@ -635,6 +638,36 @@ def main():
     if not malicious_clients:
         malicious_clients = list(np.random.choice(all_clients, num_malicious, replace=False))
         malicious_clients = [i in malicious_clients for i in all_clients]
+        
+    exp_name = None if data["exp_name"] == "" else data["exp_name"]
+    record_latent_space = data["record_latent_space"]
+    IID = data["IID"]
+    cwd = os.path.dirname(os.path.abspath(__file__))
+    cwd = os.path.dirname(cwd)
+    
+    if record_latent_space:
+        if exp_name is None:
+            exp_name = f"IID={IID}_N={numclients}_M={data['num_malicious']}_type=LF_p={data['label_flipping_prob']}"
+            
+        latent_space_dir = os.path.join(
+            cwd, "latent_space", exp_name
+        )
+        os.makedirs(latent_space_dir, exist_ok=True)
+
+        # Create a new file and write the metadata to it
+        metadata_path = os.path.join(
+            cwd, "latent_space", exp_name, "metadata.pickle"
+        )
+        metadata = {
+            "num_clients": data["nr_clients"],
+            "exp_name": exp_name,
+            "is_malicious": malicious_clients,
+            "batchsize": data["batchsize"],
+            "data_poisoning_prob": data["data_poisoning_prob"],
+            "label_flipping_prob": data["label_flipping_prob"],
+        }
+        with open(metadata_path, "wb") as handle:
+            pickle.dump(metadata, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     if pretrain_active:
         conn, addr = s.accept()
@@ -697,10 +730,13 @@ def main():
             wandb.define_metric("F1_det", summary="max")
 
     print(connectedclients)
-    global latent_space_image
-    global detection_scores, scheduling_list
     
-    for epoch in range(num_epochs):
+    if detect_anomalies or record_latent_space:
+        global latent_space_image
+        global detection_scores, scheduling_list
+        latent_space_image = utils.reset_latent_space_image()
+    
+    for epoch in range(1, num_epochs + 1):
         for c in all_clients:
             client = connectedclients[c]
             print("Started Training + Val for Client: ", c)
@@ -713,6 +749,14 @@ def main():
             train_client_for_one_epoch(client)
             # print("test client: ", c + 1)
             # test_client(client, num_epochs)
+        
+        if record_latent_space:
+            # Save current latent space image
+            latent_space_image.to_pickle(
+                os.path.join(latent_space_dir, f"epoch_{epoch}.pickle")
+            )
+            latent_space_image = utils.reset_latent_space_image()
+            
         if detect_anomalies:
             detection_scores = update_detection_scores(detection_scores, epoch=epoch, stage="chal" if add_challenge else "train")
             rolling_diffs = rolling_membership_diff(detection_scores, ref=None, method=detection_method, div=detection_divergence)

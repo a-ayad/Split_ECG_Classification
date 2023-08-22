@@ -9,6 +9,7 @@ command:
   - ${program}
   - ${args}
   - --record_latent_space
+  - --IID
 parameters:
   num_malicious: 
     values:

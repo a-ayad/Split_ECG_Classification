@@ -77,7 +77,7 @@ if __name__ == '__main__':
     json.dump(config, open("settings.json", "w"), indent=4)
     
     # launches the server and clients in parallel in two different terminals
-    cmd_server = "python3 ./server/Server.py"
+    cmd_server = "python3 ./server/Server_2.py"
     cmd_client = "python3 ./client/ClientMulti.py"
     Popen(cmd_server, shell=True)	
     time.sleep(5)	

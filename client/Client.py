@@ -277,18 +277,6 @@ def train_epoch(s, pretraining):
             "stage": "train",
         }
 
-        if record_latent_space:
-            # Save pooled vector for analysis
-            sample = {
-                "client_output": utils.split_batch(client_output_send),
-                "label": utils.split_batch(label_train),
-                "client_output_pooled": utils.split_batch(
-                    F.adaptive_avg_pool1d(client_output_send, 1).squeeze()
-                ),
-                "step": [b] * batchsize,
-                "epoch": [epoch] * batchsize,
-            }
-
         active_training_time_batch_client += time.time() - start_time_batch_forward
         Communication.send_msg(s, 0, msg)  # Send message to server
         flops_counter.read_counter("send")  # Tracks FLOPs needed to send the message
@@ -320,15 +308,9 @@ def train_epoch(s, pretraining):
         if client_grad == "abort":  # If the client update got aborted
             batches_aborted += 1
 
-            # if record_latent_space:
-            #    sample["grad_client"] = utils.split_batch(torch.zeros_like(client_grad))
-
         else:
             flops_counter.read_counter("rest")
             client_output_backprop.backward(client_grad_decode)  # Backpropagation
-
-            # if record_latent_space:
-            #    sample["grad_client"] = utils.split_batch(client_grad_decode)
 
             optimizer.step()
             flops_counter.read_counter("backprop")
@@ -339,15 +321,6 @@ def train_epoch(s, pretraining):
         total_train_nr += 1
         train_loss += msg["train_loss"]
         output_train = msg["output_train"]
-
-        if record_latent_space:
-            sample["loss"] = [msg["train_loss"]] * batchsize
-            sample["stage"] = ["train"] * batchsize
-            sample["server_output"] = utils.split_batch(output_train)
-            df_batch = pd.DataFrame(sample)
-            latent_space_image = pd.concat(
-                [latent_space_image, df_batch], ignore_index=True
-            )
 
         active_training_time_batch_client += time.time() - start_time_batch_backward
 
@@ -537,31 +510,6 @@ def chal_stage(s, pretraining=0):
             chal_loss_total += msg["val/test_loss"]
             total_chal_nr += 1
 
-            if record_latent_space:
-                sample = {
-                    "server_output": utils.split_batch(output_chal_server),
-                    "label": utils.split_batch(label_chal),
-                    "client_output": utils.split_batch(output_chal),
-                    "client_output_pooled": utils.split_batch(
-                        F.adaptive_avg_pool1d(output_chal, 1).squeeze(2)
-                    ),
-                    "loss": [msg["val/test_loss"].detach().cpu().numpy()]
-                    * chal_batchsize,
-                    "epoch": [epoch] * chal_batchsize,
-                    "step": [b_t] * chal_batchsize,
-                    "stage": ["chal"] * chal_batchsize
-                    # "grad_client": utils.split_batch(torch.zeros_like(output_val)),
-                }
-                df_batch = pd.DataFrame(sample)
-                latent_space_image = pd.concat(
-                    [latent_space_image, df_batch], ignore_index=True
-                )
-
-            # if b_t < 5:
-            #    print("Label: ", label_val[b_t])
-            #    print("Pred.: ", torch.round(output_val_server[b_t]))
-            #    print("-------------------------------------------------------------------------")
-
             acc += chal_accuracy(
                 output_chal_server.detach().clone().cpu(),
                 label_chal.detach().clone().cpu().int(),
@@ -658,31 +606,6 @@ def val_stage(s, pretraining=0):
             val_loss_total += msg["val/test_loss"]
             total_val_nr += 1
 
-            if record_latent_space:
-                sample = {
-                    "server_output": utils.split_batch(output_val_server),
-                    "label": utils.split_batch(label_val),
-                    "client_output": utils.split_batch(output_val),
-                    "client_output_pooled": utils.split_batch(
-                        F.adaptive_avg_pool1d(output_val, 1).squeeze()
-                    ),
-                    "loss": [msg["val/test_loss"].detach().cpu().numpy()]
-                    * val_batchsize,
-                    "epoch": [epoch] * val_batchsize,
-                    "step": [b_t] * val_batchsize,
-                    "stage": ["val"] * val_batchsize
-                    # "grad_client": utils.split_batch(torch.zeros_like(output_val)),
-                }
-                df_batch = pd.DataFrame(sample)
-                latent_space_image = pd.concat(
-                    [latent_space_image, df_batch], ignore_index=True
-                )
-
-            # if b_t < 5:
-            #    print("Label: ", label_val[b_t])
-            #    print("Pred.: ", torch.round(output_val_server[b_t]))
-            #    print("-------------------------------------------------------------------------")
-
             acc += val_accuracy(
                 output_val_server.detach().clone().cpu(),
                 label_val.detach().clone().cpu().int(),
@@ -737,13 +660,6 @@ def val_stage(s, pretraining=0):
             torch.cuda.empty_cache()
         Communication.send_msg(s, 3, 0)
 
-    # Save current latent space image
-    if record_latent_space:
-        latent_space_image.to_pickle(
-            os.path.join(latent_space_dir, f"epoch_{epoch}.pickle")
-        )
-        latent_space_image = reset_latent_space_image(latent_space_image)
-
 
 def test_stage(s, epoch):
     """
@@ -794,31 +710,6 @@ def test_stage(s, epoch):
             output_test_server = msg["output_val/test_server"]
             test_loss_total += msg["val/test_loss"]
             total_test_nr += 1
-
-            if record_latent_space:
-                sample = {
-                    "server_output": utils.split_batch(output_test_server),
-                    "label": utils.split_batch(label_test),
-                    "client_output": utils.split_batch(output_test),
-                    "client_output_pooled": utils.split_batch(
-                        F.adaptive_avg_pool1d(output_test, 1).squeeze()
-                    ),
-                    "loss": [msg["val/test_loss"].detach().cpu().numpy()]
-                    * test_batchsize,
-                    "epoch": [epoch] * test_batchsize,
-                    "step": [b_t] * test_batchsize,
-                    "stage": ["test"] * test_batchsize
-                    # "grad_client": utils.split_batch(torch.zeros_like(output_val)),
-                }
-                df_batch = pd.DataFrame(sample)
-                latent_space_image = pd.concat(
-                    [latent_space_image, df_batch], ignore_index=True
-                )
-
-            # if b_t < 5:
-            #    print("Label: ", label_val[b_t])
-            #    print("Pred.: ", torch.round(output_val_server[b_t]))
-            #    print("-------------------------------------------------------------------------")
 
             acc += test_accuracy(
                 output_test_server.detach().clone().cpu(),
@@ -1245,7 +1136,7 @@ def main():
     global flops_counter
     global client_connected
     global mlb_path, scaler_path, ptb_path, output_path
-    global lr, batchsize, host, port, max_recv, autoencoder, count_flops, model, num_classes, data_poisoning_prob, blending_factor, label_flipping_prob, record_latent_space, autoencoder_train
+    global lr, batchsize, host, port, max_recv, autoencoder, count_flops, model, num_classes, data_poisoning_prob, blending_factor, label_flipping_prob, autoencoder_train
     global average_setting, exp_name, latent_space_image, mixed_dataset, IID_percentage, IID, add_challenge, latent_space_dir, client_num, num_clients, pretrain_this_client, malicious, data_poisoning_method
 
     cwd = os.path.dirname(os.path.abspath(__file__))
@@ -1289,8 +1180,6 @@ def main():
     num_clients = data["nr_clients"]
 
     # latent space analysis variables & dir for files
-    record_latent_space = data["record_latent_space"]
-    exp_name = None if data["exp_name"] == "" else data["exp_name"]
     mixed_dataset = data["mixed_with_IID_data"]
     pretrain_epochs = data["pretrain_epochs"]
     IID = data["IID"]
@@ -1340,40 +1229,6 @@ def main():
             Communication.send_msg(s, 2, initial_weights)
             Communication.send_msg(s, 3, 0)
             epoch = 0
-
-        if record_latent_space:
-            if exp_name is None:
-                exp_name = f"IID={IID}_N={num_clients}_M={data['num_malicious']}_type=LF_p={data['label_flipping_prob']}"
-                
-            latent_space_dir = os.path.join(
-                cwd, "latent_space", exp_name, "client_{}".format(client_num)
-            )
-            os.makedirs(latent_space_dir, exist_ok=True)
-            latent_space_image = reset_latent_space_image()
-
-            # Check if a file callet metadata.pickle exists in the latent_space_dir
-            # If not, create a new file and write the metadata to it
-            # Otherwise do nothing
-            metadata_path = os.path.join(
-                cwd, "latent_space", exp_name, "metadata.pickle"
-            )
-            if not os.path.isfile(metadata_path):
-                metadata = {
-                    "num_clients": data["nr_clients"],
-                    "exp_name": exp_name,
-                    "is_malicious": {client_num: malicious},
-                    "batchsize": batchsize,
-                    "data_poisoning_prob": data["data_poisoning_prob"],
-                    "label_flipping_prob": data["label_flipping_prob"],
-                }
-                with open(metadata_path, "wb") as handle:
-                    pickle.dump(metadata, handle, protocol=pickle.HIGHEST_PROTOCOL)
-            else:
-                with open(metadata_path, "rb") as handle:
-                    metadata = pickle.load(handle)
-                    metadata["is_malicious"][client_num] = malicious
-                    with open(metadata_path, "wb") as handle:
-                        pickle.dump(metadata, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         init_train_val_dataset()
         init_nn_parameters()
